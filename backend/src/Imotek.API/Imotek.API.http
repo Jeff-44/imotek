@@ -1,0 +1,11 @@
+@Imotek.API_HostAddress = http://localhost:5056
+
+GET {{Imotek.API_HostAddress}}/health
+Accept: application/json
+
+###
+
+GET {{Imotek.API_HostAddress}}/health/db
+Accept: application/json
+
+###

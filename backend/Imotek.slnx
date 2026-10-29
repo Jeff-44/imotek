@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Imotek.API/Imotek.API.csproj" />
+    <Project Path="src/Imotek.Application/Imotek.Application.csproj" />
+    <Project Path="src/Imotek.Domain/Imotek.Domain.csproj" />
+    <Project Path="src/Imotek.Infrastructure/Imotek.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Imotek.Tests/Imotek.Tests.csproj" />
+  </Folder>
+</Solution>
