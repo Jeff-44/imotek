@@ -14,6 +14,7 @@ public sealed class Property
     public const decimal MaxPrice = 1_000_000_000_000m;
 
     private List<string> _imageUrls = [];
+    private readonly List<PropertyImage> _images = [];
 
     // Required by EF Core.
     private Property()
@@ -36,9 +37,23 @@ public sealed class Property
     public int? Bathrooms { get; private set; }
     public decimal? Area { get; private set; }
     public PropertyStatus Status { get; private set; }
+    /// <summary>External photo links (legacy). Uploaded photos are in <see cref="Images"/>.</summary>
     public IReadOnlyList<string> ImageUrls => _imageUrls;
+
+    /// <summary>Uploaded photos, in display order.</summary>
+    public IReadOnlyList<PropertyImage> Images => _images;
+
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
+
+    /// <summary>Normalized title and description (see <see cref="SearchText"/>).</summary>
+    public string SearchKey { get; private set; } = string.Empty;
+
+    /// <summary>Normalized city, department and address.</summary>
+    public string LocationKey { get; private set; } = string.Empty;
+
+    /// <summary>Normalized department, for exact matching.</summary>
+    public string DepartmentKey { get; private set; } = string.Empty;
 
     /// <summary>True when the property may be shown to anonymous visitors and clients.</summary>
     public bool IsPubliclyVisible => Status == PropertyStatus.Available;
@@ -67,11 +82,44 @@ public sealed class Property
 
     public void Update(PropertyDetails details, DateTime utcNow) => Apply(details, utcNow);
 
+    public int PhotoCount => _images.Count + _imageUrls.Count;
+
+    public bool CanAddImage => PhotoCount < MaxImages;
+
+    public void AddImage(PropertyImage image, DateTime utcNow)
+    {
+        if (!CanAddImage)
+        {
+            throw new DomainValidationException(new Dictionary<string, string[]>
+            {
+                [nameof(Images)] = [$"A property can have at most {MaxImages} images."],
+            });
+        }
+
+        _images.Add(image);
+        UpdatedAt = utcNow;
+    }
+
+    public PropertyImage? RemoveImage(Guid imageId, DateTime utcNow)
+    {
+        var image = _images.FirstOrDefault(i => i.Id == imageId);
+        if (image is not null)
+        {
+            _images.Remove(image);
+            UpdatedAt = utcNow;
+        }
+
+        return image;
+    }
+
+    public int NextImageSortOrder => _images.Count == 0 ? 0 : _images.Max(i => i.SortOrder) + 1;
+
     /// <summary>
     /// Single source of the property rules. Used by the entity itself and by the
     /// application layer to report every problem at once instead of failing on the first.
     /// </summary>
-    public static IReadOnlyDictionary<string, string[]> Validate(PropertyDetails details)
+    /// <param name="uploadedImageCount">Uploaded photos already attached, which share the image limit.</param>
+    public static IReadOnlyDictionary<string, string[]> Validate(PropertyDetails details, int uploadedImageCount = 0)
     {
         var errors = new Dictionary<string, List<string>>();
         void Add(string field, string message)
@@ -117,7 +165,7 @@ public sealed class Property
         }
 
         var images = details.ImageUrls ?? [];
-        if (images.Count > MaxImages)
+        if (images.Count + uploadedImageCount > MaxImages)
         {
             Add(nameof(details.ImageUrls), $"A property can have at most {MaxImages} images.");
         }
@@ -132,7 +180,7 @@ public sealed class Property
 
     private void Apply(PropertyDetails details, DateTime utcNow)
     {
-        var errors = Validate(details);
+        var errors = Validate(details, _images.Count);
         if (errors.Count > 0)
         {
             throw new DomainValidationException(errors);
@@ -153,6 +201,9 @@ public sealed class Property
         Area = details.Area;
         Status = details.Status;
         _imageUrls = (details.ImageUrls ?? []).Select(url => url.Trim()).ToList();
+        SearchKey = SearchText.Join(Title, Description);
+        LocationKey = SearchText.Join(City, Department, Address);
+        DepartmentKey = SearchText.Normalize(Department);
         UpdatedAt = utcNow;
     }
 

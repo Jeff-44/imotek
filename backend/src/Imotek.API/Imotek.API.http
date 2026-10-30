@@ -26,8 +26,18 @@ Content-Type: application/json
 GET {{Imotek.API_HostAddress}}/api/auth/me
 Authorization: Bearer {{token}}
 
-### Public search
-GET {{Imotek.API_HostAddress}}/api/properties?location=petion&transactionType=Rent&minPrice=500&maxPrice=2000
+### Refresh (paste the refreshToken from login)
+POST {{Imotek.API_HostAddress}}/api/auth/refresh
+Content-Type: application/json
+
+{ "refreshToken": "" }
+
+### Logout (revokes refresh tokens on all devices)
+POST {{Imotek.API_HostAddress}}/api/auth/logout
+Authorization: Bearer {{token}}
+
+### Public search (a price range needs a currency)
+GET {{Imotek.API_HostAddress}}/api/properties?location=petion&transactionType=Rent&minPrice=500&maxPrice=2000&currency=USD
 
 ### Create (agent)
 POST {{Imotek.API_HostAddress}}/api/properties

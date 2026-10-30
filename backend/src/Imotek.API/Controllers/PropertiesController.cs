@@ -1,7 +1,10 @@
+using Imotek.API.Configuration;
 using Imotek.Application.Common;
+using Imotek.Application.Images;
 using Imotek.Application.Properties;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Imotek.API.Controllers;
 
@@ -46,4 +49,29 @@ public sealed class PropertiesController(PropertyService properties) : ApiContro
     [Authorize(Roles = Roles.Agent)]
     public async Task<ActionResult> Delete(Guid id, CancellationToken cancellationToken) =>
         NoContentOrProblem(await properties.DeleteAsync(id, cancellationToken));
+
+    // Multipart overhead on top of the image limit; larger bodies are cut off with 413.
+    private const long MaxUploadRequestBytes = ImageRules.MaxUploadBytes + 64 * 1024;
+
+    /// <summary>Uploads one photo (multipart field "file"): JPEG, PNG or WebP, 5 MB at most.</summary>
+    [HttpPost("{id:guid}/images")]
+    [Authorize(Roles = $"{Roles.Agent},{Roles.Admin}")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxUploadRequestBytes)]
+    [RequestFormLimits(MultipartBodyLengthLimit = MaxUploadRequestBytes)]
+    [EnableRateLimiting(ApiSecurity.UploadRateLimit)]
+    public async Task<ActionResult<PropertyResponse>> UploadImage(Guid id, IFormFile file, CancellationToken cancellationToken)
+    {
+        await using var content = file.OpenReadStream();
+        var result = await properties.AddImageAsync(
+            id, new UploadedFile(content, file.Length, file.FileName, file.ContentType), cancellationToken);
+        return result.IsSuccess
+            ? CreatedAtAction(nameof(GetById), new { id }, result.Value)
+            : ToProblem(result.Error!);
+    }
+
+    [HttpDelete("{id:guid}/images/{imageId:guid}")]
+    [Authorize(Roles = $"{Roles.Agent},{Roles.Admin}")]
+    public async Task<ActionResult<PropertyResponse>> DeleteImage(Guid id, Guid imageId, CancellationToken cancellationToken) =>
+        OkOrProblem(await properties.DeleteImageAsync(id, imageId, cancellationToken));
 }

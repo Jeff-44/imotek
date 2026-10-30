@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { authApi, type RegisterInput } from '../api/auth'
-import { getToken, setToken, setUnauthorizedHandler } from '../api/client'
+import { getToken, setSessionExpiredHandler, setTokens } from '../api/client'
 import type { User } from '../api/types'
 import { AuthContext, type AuthState } from './context'
 
@@ -8,39 +8,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(() => getToken() !== null)
 
-  const logout = useCallback(() => {
-    setToken(null)
+  const clearSession = useCallback(() => {
+    setTokens(null)
     setUser(null)
   }, [])
 
-  useEffect(() => {
-    setUnauthorizedHandler(logout)
-    return () => setUnauthorizedHandler(null)
-  }, [logout])
+  const logout = useCallback(() => {
+    setUser(null)
+    // Revoke the refresh tokens on the server, then forget them locally either way.
+    authApi
+      .logout()
+      .catch(() => undefined)
+      .finally(() => setTokens(null))
+  }, [])
 
-  // Restore the session from a stored token.
+  useEffect(() => {
+    setSessionExpiredHandler(clearSession)
+    return () => setSessionExpiredHandler(null)
+  }, [clearSession])
+
+  // Restore the session from stored tokens (an expired access token is renewed automatically).
   useEffect(() => {
     if (!getToken()) return
     let active = true
     authApi
       .me()
       .then((me) => active && setUser(me))
-      .catch(() => active && logout())
+      .catch(() => active && clearSession())
       .finally(() => active && setLoading(false))
     return () => {
       active = false
     }
-  }, [logout])
+  }, [clearSession])
 
   const login = useCallback(async (email: string, password: string) => {
-    const token = await authApi.login(email, password)
-    setToken(token.accessToken)
+    setTokens(await authApi.login(email, password))
     try {
       const me = await authApi.me()
       setUser(me)
       return me
     } catch (error) {
-      setToken(null)
+      setTokens(null)
       throw error
     }
   }, [])

@@ -1,7 +1,7 @@
-import { apiFetch } from './client'
+import { apiFetch, type Tokens } from './client'
 import type { User } from './types'
 
-type TokenResponse = { tokenType: string; accessToken: string; expiresIn: number }
+type TokenResponse = Tokens & { tokenType: string; expiresIn: number }
 
 export type RegisterInput = {
   email: string
@@ -18,4 +18,7 @@ export const authApi = {
     apiFetch<User>('/api/auth/register', { method: 'POST', body: JSON.stringify(input) }),
 
   me: () => apiFetch<User>('/api/auth/me'),
+
+  /** Revokes every refresh token of the user on the server. */
+  logout: () => apiFetch<void>('/api/auth/logout', { method: 'POST' }),
 }

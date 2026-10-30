@@ -38,6 +38,20 @@ export function readSearch(params: URLSearchParams): PropertySearch {
   }
 }
 
+/**
+ * Same rule as the API: a price range needs a currency, because HTG and USD amounts
+ * are never compared without an agreed exchange rate.
+ */
+export function searchProblem(search: PropertySearch): string | null {
+  if ((search.minPrice !== undefined || search.maxPrice !== undefined) && !search.currency) {
+    return 'Choisissez une devise (HTG ou USD) pour filtrer par prix.'
+  }
+  if (search.minPrice !== undefined && search.maxPrice !== undefined && search.minPrice > search.maxPrice) {
+    return 'Le prix minimum doit être inférieur au prix maximum.'
+  }
+  return null
+}
+
 export function toSearchParams(search: PropertySearch): URLSearchParams {
   const params = new URLSearchParams()
   for (const [key, value] of Object.entries(search)) {

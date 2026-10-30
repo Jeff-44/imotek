@@ -60,14 +60,29 @@ export type Property = {
   bedrooms: number | null
   bathrooms: number | null
   area: number | null
+  /** Every photo to display, uploaded ones first. */
   imageUrls: string[]
+  /** Uploaded photos, deletable by id. */
+  photos: PropertyPhoto[]
+  /** External photo links. */
+  externalImageUrls: string[]
   status: PropertyStatus
   ownerId: string
   createdAt: string
   updatedAt: string
 }
 
-export type PropertyInput = Omit<Property, 'id' | 'ownerId' | 'createdAt' | 'updatedAt'>
+export type PropertyPhoto = { id: string; url: string }
+
+/** Body of create/update. `imageUrls` holds the external links only; uploads have their own endpoint. */
+export type PropertyInput = Omit<
+  Property,
+  'id' | 'ownerId' | 'createdAt' | 'updatedAt' | 'photos' | 'externalImageUrls'
+>
+
+export const MAX_IMAGES = 10
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+export const ACCEPTED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const
 
 export type PagedResult<T> = {
   items: T[]

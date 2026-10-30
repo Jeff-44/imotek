@@ -1,8 +1,33 @@
 using Imotek.Application.Common;
+using Imotek.Application.Images;
 using Imotek.Application.Properties;
 using Imotek.Domain.Properties;
 
 namespace Imotek.Tests.TestSupport;
+
+internal sealed class InMemoryFileStorage : IFileStorage
+{
+    public Dictionary<string, byte[]> Files { get; } = [];
+
+    public Task SaveAsync(string key, byte[] content, string contentType, CancellationToken cancellationToken)
+    {
+        Files[key] = content;
+        return Task.CompletedTask;
+    }
+
+    public Task DeleteAsync(string key, CancellationToken cancellationToken)
+    {
+        Files.Remove(key);
+        return Task.CompletedTask;
+    }
+
+    public Task<StoredFile?> OpenReadAsync(string key, CancellationToken cancellationToken) =>
+        Task.FromResult(Files.TryGetValue(key, out var bytes)
+            ? new StoredFile(new MemoryStream(bytes), "application/octet-stream", bytes.Length)
+            : null);
+
+    public string GetPublicUrl(string key) => $"/media/{key}";
+}
 
 internal sealed class FakeCurrentUser(Guid? userId, params string[] roles) : ICurrentUser
 {

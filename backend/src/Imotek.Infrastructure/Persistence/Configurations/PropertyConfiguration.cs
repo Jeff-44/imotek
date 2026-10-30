@@ -37,6 +37,25 @@ internal sealed class PropertyConfiguration : IEntityTypeConfiguration<Property>
             .IsRequired();
 
         builder.Ignore(p => p.IsPubliclyVisible);
+        builder.Ignore(p => p.PhotoCount);
+        builder.Ignore(p => p.CanAddImage);
+        builder.Ignore(p => p.NextImageSortOrder);
+
+        // Normalized copies used by the search filters (lower-case, no accents).
+        builder.Property(p => p.SearchKey).IsRequired();
+        builder.Property(p => p.LocationKey).HasMaxLength(Property.LocationMaxLength * 2 + Property.AddressMaxLength + 2).IsRequired();
+        builder.Property(p => p.DepartmentKey).HasMaxLength(Property.LocationMaxLength).IsRequired();
+        builder.HasIndex(p => p.DepartmentKey);
+
+        builder.HasMany(p => p.Images)
+            .WithOne()
+            .HasForeignKey("PropertyId")
+            .IsRequired()
+            .OnDelete(DeleteBehavior.Cascade);
+        builder.Navigation(p => p.Images)
+            .HasField("_images")
+            .UsePropertyAccessMode(PropertyAccessMode.Field)
+            .AutoInclude();
 
         // The domain only knows OwnerId; the relationship to the user table is an infrastructure concern.
         builder.HasOne<ApplicationUser>()

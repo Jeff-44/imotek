@@ -6,6 +6,7 @@ using Imotek.Application.Common;
 using Imotek.Infrastructure;
 using Imotek.Infrastructure.Identity;
 using Imotek.Infrastructure.Persistence;
+using Imotek.Infrastructure.Storage;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -34,6 +35,9 @@ public sealed class PostgresApiFixture : IAsyncLifetime
 
     public string? SkipReason { get; private set; }
 
+    /// <summary>Throw-away upload directory, deleted with the fixture.</summary>
+    public string UploadRoot { get; } = Path.Combine(Path.GetTempPath(), "imotek-tests", Guid.NewGuid().ToString("N"));
+
     public async ValueTask InitializeAsync()
     {
         try
@@ -55,6 +59,9 @@ public sealed class PostgresApiFixture : IAsyncLifetime
             builder.UseSetting(AdminSeeder.EmailKey, AdminEmail);
             builder.UseSetting(AdminSeeder.PasswordKey, AdminPassword);
             builder.UseSetting("Logging:LogLevel:Microsoft.EntityFrameworkCore", "Warning");
+            // Every test client shares one address; the limiter itself is covered by SecurityTests.
+            builder.UseSetting("RateLimiting:AuthPermitLimit", "100000");
+            builder.UseSetting(FileStorageOptions.SectionName + ":RootPath", UploadRoot);
         });
 
         // Migrations must exist before the host starts, because startup seeds the admin.
@@ -77,6 +84,11 @@ public sealed class PostgresApiFixture : IAsyncLifetime
         if (_container is not null)
         {
             await _container.DisposeAsync();
+        }
+
+        if (Directory.Exists(UploadRoot))
+        {
+            Directory.Delete(UploadRoot, recursive: true);
         }
     }
 

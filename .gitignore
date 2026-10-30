@@ -51,6 +51,10 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+!.env.prod.example
+
+# Local uploads and Data Protection keys (FileStorage:RootPath, DataProtection:KeysPath)
+backend/src/Imotek.API/data/
 appsettings.*.local.json
 appsettings.Local.json
 secrets.json

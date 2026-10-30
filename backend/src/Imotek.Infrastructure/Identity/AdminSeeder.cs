@@ -2,6 +2,7 @@ using Imotek.Application.Common;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
 namespace Imotek.Infrastructure.Identity;
@@ -28,6 +29,14 @@ public static class AdminSeeder
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 
         var user = await userManager.FindByEmailAsync(email);
+        if (user is not null && !scope.ServiceProvider.GetRequiredService<IHostEnvironment>().IsDevelopment())
+        {
+            // The password is only used to create the account; it is never reset from configuration.
+            logger.LogWarning(
+                "{PasswordKey} is still configured although the admin account exists. Remove it from the environment.",
+                PasswordKey);
+        }
+
         if (user is null)
         {
             user = new ApplicationUser { UserName = email, Email = email, FullName = "Administrateur" };

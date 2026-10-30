@@ -1,6 +1,7 @@
 using Imotek.Application.Common;
 using Imotek.Application.Properties;
 using Imotek.Domain.Properties;
+using Imotek.Infrastructure.Images;
 using Imotek.Tests.TestSupport;
 
 namespace Imotek.Tests.Application;
@@ -17,7 +18,9 @@ public class PropertyServiceTests
     private readonly FixedTimeProvider _time = new(PropertyTestData.Now);
     private readonly CancellationToken _ct = TestContext.Current.CancellationToken;
 
-    private PropertyService ServiceFor(ICurrentUser user) => new(_repository, user, _time);
+    private InMemoryFileStorage Storage { get; } = new();
+
+    private PropertyService ServiceFor(ICurrentUser user) => new(_repository, user, _time, Storage, new ImageProcessor());
 
     private Property Seed(Guid ownerId, PropertyStatus status = PropertyStatus.Available)
     {

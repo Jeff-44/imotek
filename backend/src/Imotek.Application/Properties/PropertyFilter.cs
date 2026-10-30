@@ -1,3 +1,4 @@
+using Imotek.Domain.Common;
 using Imotek.Domain.Properties;
 
 namespace Imotek.Application.Properties;
@@ -21,7 +22,8 @@ public static class PropertyQueryExtensions
 {
     /// <summary>
     /// Pure LINQ so the same rules run against EF Core (translated to SQL) and against
-    /// in-memory collections in unit tests. ToLower().Contains() translates to lower(x) LIKE.
+    /// in-memory collections in unit tests. Text filters compare against the normalized
+    /// keys stored on <see cref="Property"/>, so they ignore case and accents.
     /// </summary>
     public static IQueryable<Property> ApplyFilter(this IQueryable<Property> query, PropertyFilter filter)
     {
@@ -35,25 +37,19 @@ public static class PropertyQueryExtensions
             query = query.Where(p => p.Status == status);
         }
 
-        if (filter.Search is { } search)
+        if (SearchText.Normalize(filter.Search) is { Length: > 0 } search)
         {
-            var term = search.ToLower();
-            query = query.Where(p => p.Title.ToLower().Contains(term) || p.Description.ToLower().Contains(term));
+            query = query.Where(p => p.SearchKey.Contains(search));
         }
 
-        if (filter.Location is { } location)
+        if (SearchText.Normalize(filter.Location) is { Length: > 0 } location)
         {
-            var term = location.ToLower();
-            query = query.Where(p =>
-                p.City.ToLower().Contains(term)
-                || p.Department.ToLower().Contains(term)
-                || p.Address.ToLower().Contains(term));
+            query = query.Where(p => p.LocationKey.Contains(location));
         }
 
-        if (filter.Department is { } department)
+        if (SearchText.Normalize(filter.Department) is { Length: > 0 } department)
         {
-            var value = department.ToLower();
-            query = query.Where(p => p.Department.ToLower() == value);
+            query = query.Where(p => p.DepartmentKey == department);
         }
 
         if (filter.PropertyType is { } propertyType)

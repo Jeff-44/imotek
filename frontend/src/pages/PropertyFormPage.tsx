@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams } from 'react-router'
 import { ApiError } from '../api/client'
 import { propertiesApi } from '../api/properties'
 import {
@@ -11,13 +11,14 @@ import {
   statusLabels,
   transactionLabels,
   transactionTypes,
+  MAX_IMAGES,
   type Property,
   type PropertyInput,
+  type PropertyPhoto,
 } from '../api/types'
 import { FormField } from '../components/FormField'
+import { PhotoManager } from '../components/PhotoManager'
 import { useApi } from '../useApi'
-
-const MAX_IMAGES = 10
 
 export function PropertyFormPage() {
   const { id } = useParams()
@@ -49,11 +50,14 @@ function numberOrNull(value: FormDataEntryValue | null): number | null {
 
 function PropertyForm({ property }: { property: Property | null }) {
   const navigate = useNavigate()
-  const [images, setImages] = useState<string[]>(property?.imageUrls.length ? property.imageUrls : [''])
+  const justCreated = (useLocation().state as { created?: boolean } | null)?.created === true
+  const [images, setImages] = useState<string[]>(property?.externalImageUrls.length ? property.externalImageUrls : [''])
+  const [photos, setPhotos] = useState<PropertyPhoto[]>(property?.photos ?? [])
   const [error, setError] = useState<ApiError | null>(null)
   const [pending, setPending] = useState(false)
   const errors = error?.fieldErrors ?? {}
   const isEdit = property !== null
+  const linkCount = images.filter((url) => url.trim()).length
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -81,9 +85,14 @@ function PropertyForm({ property }: { property: Property | null }) {
     setPending(true)
     setError(null)
     try {
-      if (isEdit) await propertiesApi.update(property.id, input)
-      else await propertiesApi.create(input)
-      navigate('/espace-agent')
+      if (isEdit) {
+        await propertiesApi.update(property.id, input)
+        navigate('/espace-agent')
+      } else {
+        // Photos are uploaded against an existing property, so continue on its edit page.
+        const created = await propertiesApi.create(input)
+        navigate(`/espace-agent/biens/${created.id}/modifier`, { replace: true, state: { created: true } })
+      }
     } catch (err) {
       setError(err instanceof ApiError ? err : new ApiError(0, 'Une erreur est survenue.'))
       window.scrollTo(0, 0)
@@ -98,6 +107,12 @@ function PropertyForm({ property }: { property: Property | null }) {
         ← Retour à mon espace
       </Link>
       <h1 className="page__title">{isEdit ? 'Modifier le bien' : 'Ajouter un bien'}</h1>
+
+      {justCreated && (
+        <p className="alert alert--success" role="status">
+          Bien enregistré. Ajoutez maintenant vos photos ci-dessous.
+        </p>
+      )}
 
       {error && (
         <p className="alert alert--error" role="alert">
@@ -232,7 +247,18 @@ function PropertyForm({ property }: { property: Property | null }) {
 
         <fieldset className="property-form__section">
           <legend>Photos</legend>
-          <p className="field__hint">Adresses (URL https) de vos photos, {MAX_IMAGES} au maximum. La première sert de photo principale.</p>
+          {isEdit ? (
+            <PhotoManager propertyId={property.id} photos={photos} linkCount={linkCount} onChange={setPhotos} />
+          ) : (
+            <p className="field__hint">Vous pourrez importer vos photos juste après avoir enregistré le bien.</p>
+          )}
+        </fieldset>
+
+        <fieldset className="property-form__section">
+          <legend>Liens vers des photos externes (facultatif)</legend>
+          <p className="field__hint">
+            Adresses https de photos déjà en ligne. Photos importées et liens comptent ensemble : {MAX_IMAGES} au maximum.
+          </p>
           {errors.imageUrls?.map((message) => (
             <p key={message} className="field__error">
               {message}
@@ -245,14 +271,14 @@ function PropertyForm({ property }: { property: Property | null }) {
                   type="url"
                   className="input"
                   placeholder="https://…"
-                  aria-label={`Photo ${index + 1}`}
+                  aria-label={`Lien photo ${index + 1}`}
                   value={url}
                   onChange={(event) => setImages((list) => list.map((item, i) => (i === index ? event.target.value : item)))}
                 />
                 <button
                   type="button"
                   className="button button--ghost"
-                  aria-label={`Retirer la photo ${index + 1}`}
+                  aria-label={`Retirer le lien ${index + 1}`}
                   onClick={() => setImages((list) => (list.length > 1 ? list.filter((_, i) => i !== index) : ['']))}
                 >
                   Retirer
@@ -260,9 +286,9 @@ function PropertyForm({ property }: { property: Property | null }) {
               </li>
             ))}
           </ul>
-          {images.length < MAX_IMAGES && (
+          {images.length + photos.length < MAX_IMAGES && (
             <button type="button" className="link-button" onClick={() => setImages((list) => [...list, ''])}>
-              + Ajouter une photo
+              + Ajouter un lien
             </button>
           )}
         </fieldset>

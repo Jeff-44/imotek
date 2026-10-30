@@ -1,15 +1,60 @@
 using System.Security.Claims;
 using Imotek.Application.Auth;
 using Imotek.Application.Common;
+using Microsoft.AspNetCore.Authentication.BearerToken;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
 
 namespace Imotek.Infrastructure.Identity;
 
 internal sealed class IdentityAuthService(
     UserManager<ApplicationUser> userManager,
-    SignInManager<ApplicationUser> signInManager) : IAuthService
+    SignInManager<ApplicationUser> signInManager,
+    IOptionsMonitor<BearerTokenOptions> bearerTokenOptions,
+    TimeProvider timeProvider) : IAuthService
 {
     private const string InvalidCredentials = "Invalid email or password.";
+    private const string InvalidRefreshToken = "The session has expired. Please sign in again.";
+
+    // Same validation as the refresh endpoint of MapIdentityApi: the token must decrypt,
+    // be unexpired, and carry the user's current security stamp.
+    public async Task<Result<ClaimsPrincipal>> CreateRefreshPrincipalAsync(RefreshRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+        {
+            return Error.Unauthorized(InvalidRefreshToken);
+        }
+
+        var protector = bearerTokenOptions.Get(IdentityConstants.BearerScheme).RefreshTokenProtector;
+        var ticket = protector.Unprotect(request.RefreshToken);
+
+        if (ticket?.Properties.ExpiresUtc is not { } expiresUtc
+            || timeProvider.GetUtcNow() >= expiresUtc
+            || await signInManager.ValidateSecurityStampAsync(ticket.Principal) is not { } user)
+        {
+            return Error.Unauthorized(InvalidRefreshToken);
+        }
+
+        if (await userManager.IsLockedOutAsync(user))
+        {
+            return Error.Unauthorized(InvalidRefreshToken);
+        }
+
+        return await signInManager.CreateUserPrincipalAsync(user);
+    }
+
+    public async Task<Result> RevokeSessionsAsync(Guid userId)
+    {
+        var user = await userManager.FindByIdAsync(userId.ToString());
+        if (user is null)
+        {
+            return Error.Unauthorized();
+        }
+
+        // A new security stamp makes every refresh token issued so far invalid.
+        await userManager.UpdateSecurityStampAsync(user);
+        return Result.Success();
+    }
 
     public async Task<Result<UserResponse>> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken)
     {

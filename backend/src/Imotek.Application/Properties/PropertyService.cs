@@ -1,4 +1,5 @@
 using Imotek.Application.Common;
+using Imotek.Application.Images;
 using Imotek.Domain.Properties;
 
 namespace Imotek.Application.Properties;
@@ -7,7 +8,12 @@ namespace Imotek.Application.Properties;
 /// Property use cases. Every authorization rule lives here, so it holds no matter
 /// which endpoint (agent, admin, public) calls in.
 /// </summary>
-public sealed class PropertyService(IPropertyRepository repository, ICurrentUser currentUser, TimeProvider timeProvider)
+public sealed class PropertyService(
+    IPropertyRepository repository,
+    ICurrentUser currentUser,
+    TimeProvider timeProvider,
+    IFileStorage storage,
+    IImageProcessor imageProcessor)
 {
     public const string DefaultCountry = "Haïti";
     public const int DefaultPageSize = 12;
@@ -41,7 +47,7 @@ public sealed class PropertyService(IPropertyRepository repository, ICurrentUser
         repository.Add(property);
         await repository.SaveChangesAsync(cancellationToken);
 
-        return PropertyResponse.From(property);
+        return ToResponse(property);
     }
 
     public async Task<Result<PropertyResponse>> GetByIdAsync(Guid id, CancellationToken cancellationToken)
@@ -52,7 +58,7 @@ public sealed class PropertyService(IPropertyRepository repository, ICurrentUser
             return Error.NotFound();
         }
 
-        return PropertyResponse.From(property);
+        return ToResponse(property);
     }
 
     public async Task<Result<PropertyResponse>> UpdateAsync(Guid id, PropertyRequest request, CancellationToken cancellationToken)
@@ -72,7 +78,7 @@ public sealed class PropertyService(IPropertyRepository repository, ICurrentUser
         property!.Update(details.Value, UtcNow);
         await repository.SaveChangesAsync(cancellationToken);
 
-        return PropertyResponse.From(property);
+        return ToResponse(property);
     }
 
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
@@ -83,10 +89,93 @@ public sealed class PropertyService(IPropertyRepository repository, ICurrentUser
             return error;
         }
 
-        repository.Remove(property!);
+        var storageKeys = property!.Images.Select(i => i.StorageKey).ToList();
+        repository.Remove(property);
         await repository.SaveChangesAsync(cancellationToken);
 
+        // Files go only once the rows are gone, so a failed save never leaves broken photos.
+        foreach (var key in storageKeys)
+        {
+            await storage.DeleteAsync(key, cancellationToken);
+        }
+
         return Result.Success();
+    }
+
+    public async Task<Result<PropertyResponse>> AddImageAsync(Guid id, UploadedFile file, CancellationToken cancellationToken)
+    {
+        var property = await repository.GetByIdAsync(id, cancellationToken);
+        if (Deny(property) is { } error)
+        {
+            return error;
+        }
+
+        if (file.Length <= 0)
+        {
+            return Error.Validation("File", "The file is empty.");
+        }
+
+        if (file.Length > ImageRules.MaxUploadBytes)
+        {
+            return Error.Validation("File", $"The file must be at most {ImageRules.MaxUploadBytes / (1024 * 1024)} MB.");
+        }
+
+        if (!property!.CanAddImage)
+        {
+            return Error.Validation("File", $"A property can have at most {Property.MaxImages} images.");
+        }
+
+        var content = await ReadBoundedAsync(file.Content, ImageRules.MaxUploadBytes, cancellationToken);
+        if (content is null)
+        {
+            return Error.Validation("File", $"The file must be at most {ImageRules.MaxUploadBytes / (1024 * 1024)} MB.");
+        }
+
+        // The real format comes from the bytes; the declared name and content type are ignored.
+        var image = imageProcessor.Sanitize(content);
+        if (image is null)
+        {
+            return Error.Validation("File", "Only JPEG, PNG and WebP images are accepted.");
+        }
+
+        var imageId = Guid.CreateVersion7();
+        var key = $"properties/{property.Id:N}/{imageId:N}{image.Extension}";
+        await storage.SaveAsync(key, image.Content, image.ContentType, cancellationToken);
+
+        try
+        {
+            property.AddImage(
+                PropertyImage.Create(imageId, key, image.ContentType, image.Content.Length, property.NextImageSortOrder, UtcNow),
+                UtcNow);
+            await repository.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            await storage.DeleteAsync(key, CancellationToken.None);
+            throw;
+        }
+
+        return ToResponse(property);
+    }
+
+    public async Task<Result<PropertyResponse>> DeleteImageAsync(Guid id, Guid imageId, CancellationToken cancellationToken)
+    {
+        var property = await repository.GetByIdAsync(id, cancellationToken);
+        if (Deny(property) is { } error)
+        {
+            return error;
+        }
+
+        var image = property!.RemoveImage(imageId, UtcNow);
+        if (image is null)
+        {
+            return Error.NotFound("The image was not found.");
+        }
+
+        await repository.SaveChangesAsync(cancellationToken);
+        await storage.DeleteAsync(image.StorageKey, cancellationToken);
+
+        return ToResponse(property);
     }
 
     /// <summary>Public catalogue: only available properties, whoever asks.</summary>
@@ -146,6 +235,13 @@ public sealed class PropertyService(IPropertyRepository repository, ICurrentUser
             errors[nameof(request.MaxPrice)] = ["MaxPrice must be greater than or equal to MinPrice."];
         }
 
+        // HTG and USD amounts are never compared with each other: there is no
+        // configured exchange rate, so a price range only makes sense in one currency.
+        if ((request.MinPrice is not null || request.MaxPrice is not null) && request.Currency is null)
+        {
+            errors[nameof(request.Currency)] = ["Currency is required when filtering by price."];
+        }
+
         if (errors.Count > 0)
         {
             return Error.Validation(errors);
@@ -165,7 +261,7 @@ public sealed class PropertyService(IPropertyRepository repository, ICurrentUser
         });
 
         var page = await repository.SearchAsync(filter, request.Page, request.PageSize, cancellationToken);
-        return page.Map(PropertyResponse.From);
+        return page.Map(ToResponse);
     }
 
     private bool CanView(Property property) =>
@@ -248,4 +344,25 @@ public sealed class PropertyService(IPropertyRepository repository, ICurrentUser
     }
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private PropertyResponse ToResponse(Property property) => PropertyResponse.From(property, storage.GetPublicUrl);
+
+    /// <summary>Reads at most <paramref name="maxBytes"/>; null if the stream is longer, whatever Length claimed.</summary>
+    private static async Task<byte[]?> ReadBoundedAsync(Stream stream, long maxBytes, CancellationToken cancellationToken)
+    {
+        using var buffer = new MemoryStream();
+        var chunk = new byte[81920];
+        int read;
+        while ((read = await stream.ReadAsync(chunk, cancellationToken)) > 0)
+        {
+            if (buffer.Length + read > maxBytes)
+            {
+                return null;
+            }
+
+            buffer.Write(chunk, 0, read);
+        }
+
+        return buffer.ToArray();
+    }
 }

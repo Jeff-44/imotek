@@ -65,6 +65,11 @@ namespace Imotek.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("DepartmentKey")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(4000)
@@ -73,6 +78,11 @@ namespace Imotek.Infrastructure.Persistence.Migrations
                     b.PrimitiveCollection<string[]>("ImageUrls")
                         .IsRequired()
                         .HasColumnType("text[]");
+
+                    b.Property<string>("LocationKey")
+                        .IsRequired()
+                        .HasMaxLength(452)
+                        .HasColumnType("character varying(452)");
 
                     b.Property<Guid>("OwnerId")
                         .HasColumnType("uuid");
@@ -85,6 +95,10 @@ namespace Imotek.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
+
+                    b.Property<string>("SearchKey")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -106,11 +120,50 @@ namespace Imotek.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("DepartmentKey");
+
                     b.HasIndex("OwnerId");
 
                     b.HasIndex("Status", "CreatedAt");
 
                     b.ToTable("Properties", (string)null);
+                });
+
+            modelBuilder.Entity("Imotek.Domain.Properties.PropertyImage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ContentType")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("PropertyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StorageKey")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PropertyId");
+
+                    b.HasIndex("StorageKey")
+                        .IsUnique();
+
+                    b.ToTable("PropertyImages", (string)null);
                 });
 
             modelBuilder.Entity("Imotek.Infrastructure.Identity.ApplicationUser", b =>
@@ -345,6 +398,15 @@ namespace Imotek.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Imotek.Domain.Properties.PropertyImage", b =>
+                {
+                    b.HasOne("Imotek.Domain.Properties.Property", null)
+                        .WithMany("Images")
+                        .HasForeignKey("PropertyId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", null)
@@ -394,6 +456,11 @@ namespace Imotek.Infrastructure.Persistence.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Imotek.Domain.Properties.Property", b =>
+                {
+                    b.Navigation("Images");
                 });
 #pragma warning restore 612, 618
         }

@@ -65,14 +65,30 @@ public sealed record PropertyResponse(
     int? Bedrooms,
     int? Bathrooms,
     decimal? Area,
+    /// <summary>Every photo to display, uploaded ones first.</summary>
     IReadOnlyList<string> ImageUrls,
+    /// <summary>Uploaded photos, with the id needed to delete them.</summary>
+    IReadOnlyList<PropertyPhotoResponse> Photos,
+    /// <summary>External links, as sent in <see cref="PropertyRequest.ImageUrls"/>.</summary>
+    IReadOnlyList<string> ExternalImageUrls,
     PropertyStatus Status,
     Guid OwnerId,
     DateTime CreatedAt,
     DateTime UpdatedAt)
 {
-    public static PropertyResponse From(Property p) => new(
-        p.Id, p.Title, p.Description, p.PropertyType, p.TransactionType, p.Price, p.Currency,
-        p.Country, p.Department, p.City, p.Address, p.Bedrooms, p.Bathrooms, p.Area,
-        p.ImageUrls, p.Status, p.OwnerId, p.CreatedAt, p.UpdatedAt);
+    public static PropertyResponse From(Property p, Func<string, string> publicUrl)
+    {
+        var photos = p.Images
+            .OrderBy(i => i.SortOrder)
+            .Select(i => new PropertyPhotoResponse(i.Id, publicUrl(i.StorageKey)))
+            .ToList();
+
+        return new(
+            p.Id, p.Title, p.Description, p.PropertyType, p.TransactionType, p.Price, p.Currency,
+            p.Country, p.Department, p.City, p.Address, p.Bedrooms, p.Bathrooms, p.Area,
+            [.. photos.Select(ph => ph.Url), .. p.ImageUrls], photos, p.ImageUrls,
+            p.Status, p.OwnerId, p.CreatedAt, p.UpdatedAt);
+    }
 }
+
+public sealed record PropertyPhotoResponse(Guid Id, string Url);

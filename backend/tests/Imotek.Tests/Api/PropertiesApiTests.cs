@@ -21,7 +21,7 @@ public class PropertiesApiTests
         _api.SkipIfUnavailable();
     }
 
-    private static object Body(
+    internal static object Body(
         string title = "Maison test",
         string city = "Pétion-Ville",
         string transactionType = "Rent",
@@ -204,7 +204,7 @@ public class PropertiesApiTests
 
         var page = await GetPageAsync(
             _api.Anonymous(),
-            $"/api/properties?search={tag}&location=JACMEL&transactionType=Rent&propertyType=House&minPrice=500&maxPrice=1000");
+            $"/api/properties?search={tag}&location=JACMEL&transactionType=Rent&propertyType=House&minPrice=500&maxPrice=1000&currency=USD");
 
         Assert.Equal(match.Id, Assert.Single(page.Items).Id);
     }

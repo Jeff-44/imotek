@@ -1,6 +1,7 @@
 using Imotek.Application.Common;
 using Imotek.Application.Properties;
 using Imotek.Domain.Properties;
+using Imotek.Infrastructure.Images;
 using Imotek.Tests.TestSupport;
 
 namespace Imotek.Tests.Application;
@@ -13,7 +14,7 @@ public class PropertySearchTests
     private readonly InMemoryPropertyRepository _repository = new();
     private readonly CancellationToken _ct = TestContext.Current.CancellationToken;
 
-    private PropertyService PublicService => new(_repository, FakeCurrentUser.Anonymous, new FixedTimeProvider(PropertyTestData.Now));
+    private PropertyService PublicService => new(_repository, FakeCurrentUser.Anonymous, new FixedTimeProvider(PropertyTestData.Now), new InMemoryFileStorage(), new ImageProcessor());
 
     private Property Seed(PropertyDetails details, int minutesAgo = 0)
     {
@@ -120,7 +121,7 @@ public class PropertySearchTests
         var match = Seed(PropertyTestData.Details(city: "Jacmel", transactionType: TransactionType.Rent, price: 800m));
         Seed(PropertyTestData.Details(city: "Jacmel", transactionType: TransactionType.Rent, price: 5000m));
 
-        var items = await Search(new() { Location = "jacmel", TransactionType = TransactionType.Rent, MaxPrice = 1000m });
+        var items = await Search(new() { Location = "jacmel", TransactionType = TransactionType.Rent, MaxPrice = 1000m, Currency = Currency.USD });
 
         Assert.Equal(match.Id, Assert.Single(items).Id);
     }

@@ -1,4 +1,4 @@
-import type { FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import {
   currencies,
   departments,
@@ -6,7 +6,7 @@ import {
   propertyTypes,
   type PropertySearch,
 } from '../api/types'
-import { readSearch } from '../searchParams'
+import { readSearch, searchProblem } from '../searchParams'
 
 type SearchFormProps = {
   /** Compact: transaction, location and type only (home page). */
@@ -16,12 +16,17 @@ type SearchFormProps = {
 }
 
 export function SearchForm({ compact = false, initial = {}, onSearch }: SearchFormProps) {
+  const [problem, setProblem] = useState<string | null>(null)
+
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
     const params = new URLSearchParams()
     for (const [key, value] of data) if (typeof value === 'string') params.set(key, value)
-    onSearch(readSearch(params))
+    const search = readSearch(params)
+    const issue = searchProblem(search)
+    setProblem(issue)
+    if (!issue) onSearch(search)
   }
 
   // Remount when the criteria change (back/forward navigation) so the fields show them.
@@ -148,6 +153,12 @@ export function SearchForm({ compact = false, initial = {}, onSearch }: SearchFo
             />
           </div>
         </>
+      )}
+
+      {problem && (
+        <p className="field__error" role="alert">
+          {problem}
+        </p>
       )}
 
       <button type="submit" className="button search__submit">

@@ -38,7 +38,7 @@ export function PropertiesPage() {
 
           {error && (
             <div className="alert alert--error" role="alert">
-              {error.message}{' '}
+              {Object.values(error.fieldErrors).flat().join(' ') || error.message}{' '}
               <button type="button" className="link-button" onClick={reload}>
                 Réessayer
               </button>

@@ -1,11 +1,11 @@
 using System.Text.Json.Serialization;
+using Imotek.API.Configuration;
 using Imotek.API.Endpoints;
 using Imotek.API.Services;
 using Imotek.Application.Common;
 using Imotek.Application.Properties;
 using Imotek.Infrastructure;
 using Imotek.Infrastructure.Identity;
-using Microsoft.AspNetCore.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,12 +16,7 @@ builder.Services
     .AddControllers()
     .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
 
-builder.Services
-    .AddAuthentication(IdentityConstants.BearerScheme)
-    .AddBearerToken(IdentityConstants.BearerScheme, options =>
-        options.BearerTokenExpiration = TimeSpan.FromHours(1));
-builder.Services.AddAuthorization();
-
+builder.AddApiSecurity();
 builder.Services.AddInfrastructure(builder.Configuration);
 
 builder.Services.AddHttpContextAccessor();
@@ -39,9 +34,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
-app.UseHttpsRedirection();
-app.UseAuthentication();
-app.UseAuthorization();
+app.UseApiSecurity();
 
 app.MapHealthEndpoints();
 app.MapControllers();

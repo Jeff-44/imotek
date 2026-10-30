@@ -1,22 +1,34 @@
-import { translateFieldErrors } from './errorMessages'
+import { translateError, translateFieldErrors } from './errorMessages'
 
-const TOKEN_KEY = 'imotek.accessToken'
+const ACCESS_KEY = 'imotek.accessToken'
+const REFRESH_KEY = 'imotek.refreshToken'
 
-export function getToken(): string | null {
+export type Tokens = { accessToken: string; refreshToken: string }
+
+function read(key: string): string | null {
   try {
-    return localStorage.getItem(TOKEN_KEY)
+    return localStorage.getItem(key)
   } catch {
     return null
   }
 }
 
-export function setToken(token: string | null) {
+function write(key: string, value: string | null) {
   try {
-    if (token) localStorage.setItem(TOKEN_KEY, token)
-    else localStorage.removeItem(TOKEN_KEY)
+    if (value) localStorage.setItem(key, value)
+    else localStorage.removeItem(key)
   } catch {
     // Storage unavailable (private mode): the session simply won't survive a reload.
   }
+}
+
+export function getToken(): string | null {
+  return read(ACCESS_KEY)
+}
+
+export function setTokens(tokens: Tokens | null) {
+  write(ACCESS_KEY, tokens?.accessToken ?? null)
+  write(REFRESH_KEY, tokens?.refreshToken ?? null)
 }
 
 /** An HTTP error with the ProblemDetails returned by the API. */
@@ -39,36 +51,83 @@ const fallbackMessages: Record<number, string> = {
   403: 'Vous n’avez pas l’autorisation d’effectuer cette action.',
   404: 'Ressource introuvable.',
   409: 'Cette ressource existe déjà.',
+  413: 'Le fichier est trop volumineux.',
+  429: 'Trop de tentatives. Patientez une minute puis réessayez.',
 }
 
-let onUnauthorized: (() => void) | null = null
+let onSessionExpired: (() => void) | null = null
 
-/** Called when an authenticated request gets a 401 (expired or revoked token). */
-export function setUnauthorizedHandler(handler: (() => void) | null) {
-  onUnauthorized = handler
+/** Called when the session can no longer be renewed (refresh token expired or revoked). */
+export function setSessionExpiredHandler(handler: (() => void) | null) {
+  onSessionExpired = handler
 }
 
-export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+let refreshing: Promise<boolean> | null = null
+
+/**
+ * Exchanges the refresh token for new tokens. Concurrent callers share one request,
+ * because a refresh token is only meant to be used once.
+ */
+export function refreshSession(): Promise<boolean> {
+  const refreshToken = read(REFRESH_KEY)
+  if (!refreshToken) return Promise.resolve(false)
+
+  refreshing ??= (async () => {
+    try {
+      const response = await fetch('/api/auth/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      })
+      if (!response.ok) return false
+      setTokens((await response.json()) as Tokens)
+      return true
+    } catch {
+      return false
+    } finally {
+      refreshing = null
+    }
+  })()
+  return refreshing
+}
+
+async function send(path: string, init: RequestInit): Promise<Response> {
   const headers = new Headers(init.headers)
   headers.set('Accept', 'application/json')
-  if (init.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json')
+  // FormData sets its own multipart Content-Type with the boundary.
+  if (init.body && !(init.body instanceof FormData) && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
   const token = getToken()
   if (token) headers.set('Authorization', `Bearer ${token}`)
 
-  let response: Response
   try {
-    response = await fetch(path, { ...init, headers })
+    return await fetch(path, { ...init, headers })
   } catch {
     throw new ApiError(0, 'Impossible de joindre le serveur. Vérifiez votre connexion.')
   }
+}
 
-  if (response.status === 401 && token) onUnauthorized?.()
+export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const hadToken = getToken() !== null
+  let response = await send(path, init)
+
+  // Expired access token: renew it once and replay the request.
+  if (response.status === 401 && hadToken) {
+    if (await refreshSession()) {
+      response = await send(path, init)
+    } else {
+      setTokens(null)
+      onSessionExpired?.()
+    }
+  }
 
   if (!response.ok) {
     const problem = (await response.json().catch(() => ({}))) as ProblemDetails
-    const message = response.status === 400 || !problem.title
-      ? fallbackMessages[response.status] ?? 'Une erreur est survenue.'
-      : problem.title
+    const message =
+      response.status === 400 || !problem.title
+        ? fallbackMessages[response.status] ?? 'Une erreur est survenue.'
+        : translateError(problem.title)
     throw new ApiError(response.status, message, translateFieldErrors(problem.errors ?? {}))
   }
 

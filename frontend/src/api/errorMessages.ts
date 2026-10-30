@@ -17,6 +17,20 @@ const translations: [RegExp, (match: RegExpMatchArray) => string][] = [
   [/^Passwords must have at least one uppercase/i, () => 'Le mot de passe doit contenir au moins une majuscule.'],
   [/^Passwords must have at least one lowercase/i, () => 'Le mot de passe doit contenir au moins une minuscule.'],
   [/^Email '.*' is invalid/i, () => 'Adresse e-mail invalide.'],
+  [/^Currency is required when filtering by price/i, () => 'Choisissez une devise pour filtrer par prix.'],
+  [/^MaxPrice must be greater than or equal to MinPrice/i, () => 'Le prix maximum doit être supérieur au minimum.'],
+  [/^Only JPEG, PNG and WebP/i, () => 'Seules les images JPEG, PNG et WebP sont acceptées.'],
+  [/^The file must be at most (\d+) MB/i, (m) => `Le fichier ne doit pas dépasser ${m[1]} Mo.`],
+  [/^The file is empty/i, () => 'Le fichier est vide.'],
+  [/^Invalid email or password/i, () => 'Adresse e-mail ou mot de passe incorrect.'],
+  [/^Too many failed attempts/i, () => 'Trop de tentatives échouées. Réessayez dans quelques minutes.'],
+  [/^The session has expired/i, () => 'Votre session a expiré. Veuillez vous reconnecter.'],
+  [/^You can only manage your own properties/i, () => 'Vous ne pouvez gérer que vos propres biens.'],
+  [/^Only agents and owners can publish/i, () => 'Seuls les agents et propriétaires peuvent publier des biens.'],
+  [/^You are not allowed/i, () => 'Vous n’avez pas l’autorisation d’effectuer cette action.'],
+  [/^The (resource|image) was not found/i, () => 'Élément introuvable.'],
+  [/^An account with this email already exists/i, () => 'Un compte existe déjà avec cette adresse e-mail.'],
+  [/^Authentication is required/i, () => 'Veuillez vous connecter.'],
 ]
 
 export function translateError(message: string): string {
