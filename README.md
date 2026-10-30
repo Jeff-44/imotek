@@ -113,7 +113,8 @@ dotnet user-secrets set "Seed:AdminPassword" "<yon modpas solid>"
 
 | Kle (`appsettings`) | Varyab anviwònman | Default | Wòl |
 |---------------------|-------------------|---------|-----|
-| `ConnectionStrings:ImotekDb` | `ConnectionStrings__ImotekDb` | — (obligatwa) | PostgreSQL |
+| `ConnectionStrings:ImotekDb` | `ConnectionStrings__ImotekDb` | — (li oswa `DATABASE_URL`) | PostgreSQL |
+| `DATABASE_URL` | `DATABASE_URL` | — | Altènativ: URL `postgresql://user:pass@host:port/db` (Railway). API a konvèti l otomatikman. |
 | `Seed:AdminEmail`, `Seed:AdminPassword` | `Seed__AdminEmail`, `Seed__AdminPassword` | — | Kreye Admin lan (premye demaraj sèlman) |
 | `Auth:AccessTokenMinutes` | `Auth__AccessTokenMinutes` | `30` | Dire access token |
 | `Auth:RefreshTokenDays` | `Auth__RefreshTokenDays` | `7` | Dire refresh token |
@@ -215,6 +216,10 @@ cd frontend && npm test                                # 27 tès (Vitest)
 
 ## 8. Deplwaman pwodiksyon
 
+> **Railway:** gade [RAILWAY.md](RAILWAY.md). Li genyen sèvis yo, varyab yo, volume `/app/data` la, migrasyon pre-deploy yo, ak etap pou Dashboard la. `compose.prod.yaml` la pa sèvi sou Railway.
+
+### Docker Compose (sèvè Docker klasik oswa tès lokal)
+
 ```bash
 cp .env.prod.example .env.prod      # ranplase TOUT valè yo
 docker compose -f compose.prod.yaml --env-file .env.prod up -d --build
@@ -228,7 +233,7 @@ Stack la:
 | `postgres` | Sou yon rezo `internal`, san okenn pò ekspoze |
 | `migrate` | Bundle EF Core ki aplike migrasyon ki poko aplike yo, epi ki sispann apre. `api` la demare sèlman si li reyisi. |
 | `api` | Non-root, logs JSON, health check |
-| `web` | nginx non-root ki sèvi React epi ki voye `/api`, `/media` ak `/health` bay API a |
+| `web` | nginx non-root ki sèvi React epi ki voye `/api`, `/media` ak `/health` bay API a. Varyab li yo: `PORT`, `API_INTERNAL_URL`, `NGINX_TRUST_X_REAL_IP` (gade `frontend/nginx/default.conf.template`). |
 
 Volume yo: `postgres-data`, `uploads`, `dataprotection-keys`.
 

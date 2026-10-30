@@ -23,12 +23,12 @@ public static class DependencyInjection
 
     public static IServiceCollection AddInfrastructure(this IServiceCollection services, IConfiguration configuration)
     {
-        var connectionString = configuration.GetConnectionString(ConnectionStringName);
+        var connectionString = DatabaseConnectionString.Resolve(configuration);
         if (string.IsNullOrWhiteSpace(connectionString))
         {
             throw new InvalidOperationException(
                 $"Connection string '{ConnectionStringName}' is not configured. " +
-                "Set it with user-secrets or the ConnectionStrings__ImotekDb environment variable.");
+                "Set ConnectionStrings__ImotekDb (or user-secrets), or DATABASE_URL in postgresql:// form.");
         }
 
         services.AddDbContext<ImotekDbContext>(options => options.UseNpgsql(connectionString));

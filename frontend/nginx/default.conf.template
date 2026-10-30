@@ -1,0 +1,85 @@
+# Rendered at container start by the nginx image (envsubst), with only these variables:
+#   PORT                   port to listen on (Railway injects it; default 8080)
+#   API_INTERNAL_URL       where the API is reached, e.g. http://imotek-api.railway.internal:8080
+#   NGINX_LOCAL_RESOLVERS  DNS servers from /etc/resolv.conf (set by the image's 15-local-resolvers.envsh)
+#   NGINX_TRUST_X_REAL_IP  "on" only behind an edge that sets X-Real-IP itself (Railway)
+#
+# The React build and the API share one origin: the browser only talks to this server,
+# so no CORS is needed and the API can stay on the private network.
+
+map $http_x_forwarded_proto $forwarded_proto {
+    default $http_x_forwarded_proto;
+    ""      $scheme;
+}
+
+# Client address forwarded to the API (used for rate limiting). A client-supplied
+# X-Real-IP is only trusted behind an edge proxy that overwrites it.
+map "${NGINX_TRUST_X_REAL_IP}:$http_x_real_ip" $client_ip {
+    "~^on:(?<edge_ip>.+)$" $edge_ip;
+    default                $remote_addr;
+}
+
+map $forwarded_proto $hsts {
+    https   "max-age=31536000; includeSubDomains";
+    default "";
+}
+
+server {
+    listen ${PORT};
+    listen [::]:${PORT};
+    server_name _;
+    server_tokens off;
+
+    root /usr/share/nginx/html;
+
+    # Resolve the API name per request (cached 10 s): nginx starts even if the API is
+    # not up yet, and follows its new address after a redeploy.
+    resolver ${NGINX_LOCAL_RESOLVERS} valid=10s;
+    set $api_upstream ${API_INTERNAL_URL};
+
+    # 5 MB photos plus multipart overhead; the API enforces the real limit.
+    client_max_body_size 6m;
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $client_ip;
+    proxy_set_header X-Forwarded-Proto $forwarded_proto;
+    proxy_set_header X-Forwarded-Host $host;
+    proxy_set_header X-Real-IP "";
+
+    # Liveness of this container only (Railway healthcheck for the web service).
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    location /api/ {
+        proxy_pass $api_upstream;
+    }
+
+    location /media/ {
+        proxy_pass $api_upstream;
+    }
+
+    location = /health {
+        proxy_pass $api_upstream;
+    }
+
+    location = /health/db {
+        proxy_pass $api_upstream;
+    }
+
+    # Hashed build files never change.
+    location /assets/ {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+        try_files $uri =404;
+    }
+
+    # Client-side routes all serve index.html, which must never be cached.
+    location / {
+        include /etc/nginx/snippets/security-headers.conf;
+        add_header Cache-Control "no-cache" always;
+        try_files $uri $uri/ /index.html;
+    }
+}
