@@ -1,44 +1,51 @@
-export type PropertySummary = {
-  id: string
-  title: string
-  location: string
-}
+import { Link } from 'react-router'
+import { propertiesApi } from '../api/properties'
+import { useApi } from '../useApi'
+import { EmptyState } from './EmptyState'
+import { PropertyCard } from './PropertyCard'
 
-type AvailablePropertiesProps = {
-  properties: PropertySummary[]
-}
+const LATEST_COUNT = 6
 
-export function AvailableProperties({ properties }: AvailablePropertiesProps) {
+/** Latest available properties, straight from the public API. */
+export function AvailableProperties() {
+  const { data, error, loading, reload } = useApi(
+    (signal) => propertiesApi.search({ pageSize: LATEST_COUNT }, signal),
+    'latest',
+  )
+
   return (
     <section id="biens" className="section section--alt" aria-labelledby="properties-title">
       <div className="container">
-        <h2 id="properties-title" className="section__title">
-          Biens disponibles
-        </h2>
+        <div className="section__header">
+          <h2 id="properties-title" className="section__title">
+            Biens disponibles
+          </h2>
+          {data && data.totalCount > LATEST_COUNT && (
+            <Link to="/biens" className="section__link">
+              Voir les {data.totalCount} biens
+            </Link>
+          )}
+        </div>
 
-        {properties.length === 0 ? (
-          <div className="empty-state">
-            <svg className="empty-state__icon" viewBox="0 0 48 48" width="48" height="48" aria-hidden="true">
-              <path
-                d="M8 22 24 9l16 13M12 19v19h24V19"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path d="M20 30h8" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
-            </svg>
-            <p className="empty-state__title">Aucun bien disponible pour le moment</p>
-            <p className="empty-state__text">Les annonces apparaîtront ici dès leur publication.</p>
+        {loading && <p className="page-status" role="status">Chargement des biens…</p>}
+
+        {error && (
+          <div className="alert alert--error" role="alert">
+            {error.message}{' '}
+            <button type="button" className="link-button" onClick={reload}>
+              Réessayer
+            </button>
           </div>
-        ) : (
-          <ul className="properties">
-            {properties.map((property) => (
-              <li key={property.id} className="card">
-                <h3 className="card__title">{property.title}</h3>
-                <p className="card__text">{property.location}</p>
-              </li>
+        )}
+
+        {data && data.items.length === 0 && (
+          <EmptyState title="Aucun bien disponible pour le moment" text="Les annonces apparaîtront ici dès leur publication." />
+        )}
+
+        {data && data.items.length > 0 && (
+          <ul className="property-grid">
+            {data.items.map((property) => (
+              <PropertyCard key={property.id} property={property} />
             ))}
           </ul>
         )}

@@ -1,33 +1,56 @@
-import { useState, type FormEvent } from 'react'
+import type { FormEvent } from 'react'
+import {
+  currencies,
+  departments,
+  propertyTypeLabels,
+  propertyTypes,
+  type PropertySearch,
+} from '../api/types'
+import { readSearch } from '../searchParams'
 
-const propertyTypes = ['Maison', 'Appartement', 'Terrain', 'Local commercial', 'Bureau']
+type SearchFormProps = {
+  /** Compact: transaction, location and type only (home page). */
+  compact?: boolean
+  initial?: PropertySearch
+  onSearch: (search: PropertySearch) => void
+}
 
-export function SearchForm() {
-  const [submitted, setSubmitted] = useState(false)
-
-  // The search API does not exist yet: the form only tells the visitor so.
+export function SearchForm({ compact = false, initial = {}, onSearch }: SearchFormProps) {
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setSubmitted(true)
+    const data = new FormData(event.currentTarget)
+    const params = new URLSearchParams()
+    for (const [key, value] of data) if (typeof value === 'string') params.set(key, value)
+    onSearch(readSearch(params))
   }
 
+  // Remount when the criteria change (back/forward navigation) so the fields show them.
+  const formKey = JSON.stringify(initial)
+
   return (
-    <form id="recherche" className="search" onSubmit={handleSubmit} aria-labelledby="search-title">
+    <form key={formKey} className="search" onSubmit={handleSubmit} aria-labelledby="search-title" role="search">
       <h2 id="search-title" className="search__title">
         Rechercher un bien
       </h2>
 
-      <fieldset className="search__field search__field--transaction">
+      <fieldset className="search__field">
         <legend className="search__label">Transaction</legend>
-        <div className="segmented">
-          <label className="segmented__option">
-            <input type="radio" name="transaction" value="louer" defaultChecked />
-            <span>Louer</span>
-          </label>
-          <label className="segmented__option">
-            <input type="radio" name="transaction" value="acheter" />
-            <span>Acheter</span>
-          </label>
+        <div className="segmented segmented--three">
+          {[
+            { value: '', label: 'Tous' },
+            { value: 'Rent', label: 'Louer' },
+            { value: 'Sale', label: 'Acheter' },
+          ].map((option) => (
+            <label key={option.value} className="segmented__option">
+              <input
+                type="radio"
+                name="transactionType"
+                value={option.value}
+                defaultChecked={(initial.transactionType ?? '') === option.value}
+              />
+              <span>{option.label}</span>
+            </label>
+          ))}
         </div>
       </fieldset>
 
@@ -37,11 +60,11 @@ export function SearchForm() {
         </label>
         <input
           id="search-location"
-          name="localite"
+          name="location"
           type="text"
-          className="search__input"
+          className="input"
           placeholder="Ex. Pétion-Ville, Cap-Haïtien…"
-          autoComplete="off"
+          defaultValue={initial.location ?? ''}
         />
       </div>
 
@@ -49,25 +72,87 @@ export function SearchForm() {
         <label htmlFor="search-type" className="search__label">
           Type de bien
         </label>
-        <select id="search-type" name="type" className="search__input" defaultValue="">
+        <select id="search-type" name="propertyType" className="input" defaultValue={initial.propertyType ?? ''}>
           <option value="">Tous les types</option>
           {propertyTypes.map((type) => (
             <option key={type} value={type}>
-              {type}
+              {propertyTypeLabels[type]}
             </option>
           ))}
         </select>
       </div>
 
+      {!compact && (
+        <>
+          <div className="search__field">
+            <label htmlFor="search-department" className="search__label">
+              Département
+            </label>
+            <select id="search-department" name="department" className="input" defaultValue={initial.department ?? ''}>
+              <option value="">Tous les départements</option>
+              {departments.map((department) => (
+                <option key={department} value={department}>
+                  {department}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="search__field">
+            <span className="search__label" id="search-price-label">
+              Prix
+            </span>
+            <div className="search__row" role="group" aria-labelledby="search-price-label">
+              <input
+                name="minPrice"
+                type="number"
+                min="0"
+                inputMode="numeric"
+                className="input"
+                placeholder="Min"
+                aria-label="Prix minimum"
+                defaultValue={initial.minPrice ?? ''}
+              />
+              <input
+                name="maxPrice"
+                type="number"
+                min="0"
+                inputMode="numeric"
+                className="input"
+                placeholder="Max"
+                aria-label="Prix maximum"
+                defaultValue={initial.maxPrice ?? ''}
+              />
+              <select name="currency" className="input" aria-label="Devise" defaultValue={initial.currency ?? ''}>
+                <option value="">Devise</option>
+                {currencies.map((currency) => (
+                  <option key={currency} value={currency}>
+                    {currency}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="search__field">
+            <label htmlFor="search-text" className="search__label">
+              Mots-clés
+            </label>
+            <input
+              id="search-text"
+              name="search"
+              type="search"
+              className="input"
+              placeholder="Ex. piscine, meublé…"
+              defaultValue={initial.search ?? ''}
+            />
+          </div>
+        </>
+      )}
+
       <button type="submit" className="button search__submit">
         Rechercher
       </button>
-
-      <p className="search__notice" role="status">
-        {submitted
-          ? 'La recherche en ligne n’est pas encore disponible. Elle sera activée dès la mise en service de notre catalogue.'
-          : 'Aperçu : la recherche en ligne sera bientôt disponible.'}
-      </p>
     </form>
   )
 }

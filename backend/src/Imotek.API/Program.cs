@@ -1,12 +1,38 @@
+using System.Text.Json.Serialization;
 using Imotek.API.Endpoints;
+using Imotek.API.Services;
+using Imotek.Application.Common;
+using Imotek.Application.Properties;
 using Imotek.Infrastructure;
+using Imotek.Infrastructure.Identity;
+using Microsoft.AspNetCore.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOpenApi();
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<DomainValidationExceptionHandler>();
+builder.Services
+    .AddControllers()
+    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()));
+
+builder.Services
+    .AddAuthentication(IdentityConstants.BearerScheme)
+    .AddBearerToken(IdentityConstants.BearerScheme, options =>
+        options.BearerTokenExpiration = TimeSpan.FromHours(1));
+builder.Services.AddAuthorization();
+
 builder.Services.AddInfrastructure(builder.Configuration);
 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<ICurrentUser, CurrentUser>();
+builder.Services.AddScoped<PropertyService>();
+
 var app = builder.Build();
+
+app.UseExceptionHandler();
+app.UseStatusCodePages();
 
 if (app.Environment.IsDevelopment())
 {
@@ -14,8 +40,13 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapHealthEndpoints();
+app.MapControllers();
+
+await app.Services.SeedAdminAsync(app.Configuration, app.Logger);
 
 app.Run();
 

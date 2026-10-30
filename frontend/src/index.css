@@ -12,6 +12,13 @@
   --text-strong: #13292d;
   --border: #dde5e6;
   --focus: #f2a541;
+  --danger: #b42318;
+  --danger-soft: #fdecea;
+  --success: #1a7f4b;
+  --success-soft: #e3f4ea;
+  --warning: #9a5b00;
+  --warning-soft: #fdf1dc;
+  --muted-soft: #eef1f1;
   --shadow: 0 1px 2px rgb(19 41 45 / 0.06), 0 8px 24px rgb(19 41 45 / 0.08);
 
   --sans: system-ui, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -41,6 +48,13 @@
     --text-strong: #eef5f6;
     --border: #23403f;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.35);
+    --danger: #ff8a7a;
+    --danger-soft: #3a1d1a;
+    --success: #6fd49c;
+    --success-soft: #133024;
+    --warning: #f5c26b;
+    --warning-soft: #33280f;
+    --muted-soft: #1c3236;
 
     color-scheme: dark;
   }
@@ -87,7 +101,8 @@ a {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
   color: inherit;
 }

@@ -1,4 +1,6 @@
 @Imotek.API_HostAddress = http://localhost:5056
+# Paste the accessToken returned by POST /api/auth/login
+@token =
 
 GET {{Imotek.API_HostAddress}}/health
 Accept: application/json
@@ -8,4 +10,49 @@ Accept: application/json
 GET {{Imotek.API_HostAddress}}/health/db
 Accept: application/json
 
-###
+### Register an agent (role: Agent or Client)
+POST {{Imotek.API_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{ "email": "agent@example.com", "password": "Passw0rd-123", "fullName": "Agent Exemple", "role": "Agent" }
+
+### Login
+POST {{Imotek.API_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{ "email": "agent@example.com", "password": "Passw0rd-123" }
+
+### Current user
+GET {{Imotek.API_HostAddress}}/api/auth/me
+Authorization: Bearer {{token}}
+
+### Public search
+GET {{Imotek.API_HostAddress}}/api/properties?location=petion&transactionType=Rent&minPrice=500&maxPrice=2000
+
+### Create (agent)
+POST {{Imotek.API_HostAddress}}/api/properties
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+  "title": "Maison 3 chambres",
+  "description": "Maison avec cour",
+  "propertyType": "House",
+  "transactionType": "Rent",
+  "price": 1500,
+  "currency": "USD",
+  "department": "Ouest",
+  "city": "Pétion-Ville",
+  "address": "Rue Exemple",
+  "bedrooms": 3,
+  "status": "Draft",
+  "imageUrls": []
+}
+
+### My properties (agent)
+GET {{Imotek.API_HostAddress}}/api/properties/my-properties
+Authorization: Bearer {{token}}
+
+### All properties (admin)
+GET {{Imotek.API_HostAddress}}/api/admin/properties?status=Draft
+Authorization: Bearer {{token}}

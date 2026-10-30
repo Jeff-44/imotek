@@ -1,4 +1,9 @@
+using Imotek.Application.Auth;
+using Imotek.Application.Properties;
+using Imotek.Infrastructure.Identity;
 using Imotek.Infrastructure.Persistence;
+using Imotek.Infrastructure.Persistence.Repositories;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -25,6 +30,22 @@ public static class DependencyInjection
 
         services.AddHealthChecks()
             .AddDbContextCheck<ImotekDbContext>(DatabaseHealthCheckName, tags: [DatabaseHealthCheckTag]);
+
+        // The authentication scheme itself is registered by the API (host concern).
+        services.AddIdentityCore<ApplicationUser>(options =>
+            {
+                options.User.RequireUniqueEmail = true;
+                options.Password.RequiredLength = 8;
+                options.Password.RequireNonAlphanumeric = false;
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+            })
+            .AddRoles<IdentityRole<Guid>>()
+            .AddEntityFrameworkStores<ImotekDbContext>()
+            .AddSignInManager();
+
+        services.AddScoped<IAuthService, IdentityAuthService>();
+        services.AddScoped<IPropertyRepository, PropertyRepository>();
 
         return services;
     }
