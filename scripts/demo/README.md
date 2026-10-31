@@ -22,3 +22,6 @@ node scripts/demo/cleanup.mjs --confirm  # removes it
 | `nadia@demo.imotek.test` | Approved agent, consent withdrawn | Listings without a phone number, a declined visit |
 | `marie@demo.imotek.test` | Client with a phone | Rental accepted, visit with a new date to accept, purchase pending |
 | `jean@demo.imotek.test` | Client without a phone | Purchase answered, rental pending, visit declined |
+
+Two requests also come from visitors without an account (a visit and a rental on Pierre's Pétion-Ville house).
+Pierre sees them in "Demandes reçues" with the visitor's contact details; `seed.mjs` prints their private follow-up links (`/suivi/…`).

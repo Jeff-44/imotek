@@ -25,3 +25,11 @@ const dateTimeFormat = new Intl.DateTimeFormat('fr-HT', { dateStyle: 'medium', t
 export function formatDateTime(value: string): string {
   return dateTimeFormat.format(new Date(value))
 }
+
+const dateFormat = new Intl.DateTimeFormat('fr-HT', { dateStyle: 'medium' })
+
+/** A calendar date (yyyy-mm-dd), shown as such whatever the time zone. */
+export function formatDate(value: string): string {
+  const [year, month, day] = value.split('-').map(Number)
+  return dateFormat.format(new Date(year, month - 1, day))
+}

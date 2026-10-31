@@ -223,11 +223,27 @@ namespace Imotek.Infrastructure.Persistence.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
-                    b.Property<Guid>("ClientId")
+                    b.Property<Guid?>("ClientId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("GuestAccessTokenHash")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("GuestEmail")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("GuestName")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("GuestPhone")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("Message")
                         .HasMaxLength(1000)
@@ -518,10 +534,20 @@ namespace Imotek.Infrastructure.Persistence.Migrations
                 {
                     b.HasBaseType("Imotek.Domain.Requests.ClientRequest");
 
+                    b.HasIndex("GuestAccessTokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PurchaseRequests_GuestAccessTokenHash")
+                        .HasFilter("\"GuestAccessTokenHash\" IS NOT NULL");
+
                     b.HasIndex("PropertyId", "ClientId")
                         .IsUnique()
                         .HasDatabaseName("IX_PurchaseRequests_Active_PropertyId_ClientId")
                         .HasFilter("\"Status\" IN ('Pending', 'Responded', 'Accepted', 'Rescheduled')");
+
+                    b.HasIndex("PropertyId", "GuestEmail")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PurchaseRequests_ActiveGuest_PropertyId_GuestEmail")
+                        .HasFilter("\"ClientId\" IS NULL AND \"Status\" IN ('Pending', 'Responded', 'Accepted', 'Rescheduled')");
 
                     b.ToTable("PurchaseRequests", (string)null);
                 });
@@ -530,10 +556,33 @@ namespace Imotek.Infrastructure.Persistence.Migrations
                 {
                     b.HasBaseType("Imotek.Domain.Requests.ClientRequest");
 
+                    b.Property<string>("CurrentAddress")
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<int?>("DurationMonths")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("MoveInDate")
+                        .HasColumnType("date");
+
+                    b.Property<int?>("Occupants")
+                        .HasColumnType("integer");
+
+                    b.HasIndex("GuestAccessTokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RentalRequests_GuestAccessTokenHash")
+                        .HasFilter("\"GuestAccessTokenHash\" IS NOT NULL");
+
                     b.HasIndex("PropertyId", "ClientId")
                         .IsUnique()
                         .HasDatabaseName("IX_RentalRequests_Active_PropertyId_ClientId")
                         .HasFilter("\"Status\" IN ('Pending', 'Responded', 'Accepted', 'Rescheduled')");
+
+                    b.HasIndex("PropertyId", "GuestEmail")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RentalRequests_ActiveGuest_PropertyId_GuestEmail")
+                        .HasFilter("\"ClientId\" IS NULL AND \"Status\" IN ('Pending', 'Responded', 'Accepted', 'Rescheduled')");
 
                     b.ToTable("RentalRequests", (string)null);
                 });
@@ -548,10 +597,20 @@ namespace Imotek.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("VisitAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.HasIndex("GuestAccessTokenHash")
+                        .IsUnique()
+                        .HasDatabaseName("IX_VisitRequests_GuestAccessTokenHash")
+                        .HasFilter("\"GuestAccessTokenHash\" IS NOT NULL");
+
                     b.HasIndex("PropertyId", "ClientId")
                         .IsUnique()
                         .HasDatabaseName("IX_VisitRequests_Active_PropertyId_ClientId")
                         .HasFilter("\"Status\" IN ('Pending', 'Responded', 'Accepted', 'Rescheduled')");
+
+                    b.HasIndex("PropertyId", "GuestEmail")
+                        .IsUnique()
+                        .HasDatabaseName("IX_VisitRequests_ActiveGuest_PropertyId_GuestEmail")
+                        .HasFilter("\"ClientId\" IS NULL AND \"Status\" IN ('Pending', 'Responded', 'Accepted', 'Rescheduled')");
 
                     b.ToTable("VisitRequests", (string)null);
                 });
@@ -588,8 +647,7 @@ namespace Imotek.Infrastructure.Persistence.Migrations
                     b.HasOne("Imotek.Infrastructure.Identity.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("ClientId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Imotek.Infrastructure.Identity.ApplicationUser", null)
                         .WithMany()

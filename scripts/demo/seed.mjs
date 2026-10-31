@@ -160,6 +160,15 @@ function haitiDate(days, hour) {
   return date.toISOString()
 }
 
+/** Requests from visitors without an account (emails in the demo domain, removed by cleanup.mjs). */
+function guestRequests() {
+  const day = (n) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10)
+  return [
+    { type: 'Visit', fullName: 'Paul Visiteur (démo)', email: `paul.visiteur@${DEMO_DOMAIN}`, phoneNumber: '+1 201 555 0104', visitAt: haitiDate(6, 9), message: 'Visite possible tôt le matin ?' },
+    { type: 'Rental', fullName: 'Rose Locataire (démo)', email: `rose.locataire@${DEMO_DOMAIN}`, phoneNumber: '+1 201 555 0105', moveInDate: day(30), durationMonths: 12, occupants: 3, currentAddress: 'Delmas 31', message: 'Famille de trois, je peux fournir des références.' },
+  ]
+}
+
 const send = (client, key, body) => call('POST', `/api/properties/${property[key]}/requests`, { token: tokens[client], body })
 const act = (who, request, verb, body = {}) => call('POST', `/api/requests/${request.id}/${verb}`, { token: tokens[who], body })
 
@@ -181,6 +190,13 @@ await act('nadia', declined, 'decline', { message: 'Le bureau est en travaux cet
 const cancelled = await send('marie', 'delmas', { type: 'Visit', visitAt: haitiDate(5, 11), shareClientPhone: false })
 await act('marie', cancelled, 'cancel')
 
+// Visitors without an account: a visit and a rental, each with its private follow-up link.
+const guestLinks = []
+for (const body of guestRequests()) {
+  const sent = await call('POST', `/api/properties/${property.petionville}/requests`, { body })
+  guestLinks.push(`/suivi/${sent.trackingToken}`)
+}
+
 // Nadia withdraws her consent: her listings show no number (her approval stays).
 await call('PUT', '/api/auth/me', {
   token: tokens.nadia,
@@ -193,4 +209,6 @@ Done. Password for every demo account: ${PASSWORD}
   nadia@${DEMO_DOMAIN}   approved agent, number hidden (consent withdrawn)
   marie@${DEMO_DOMAIN}   client with a phone (rental accepted, visit rescheduled, purchase pending)
   jean@${DEMO_DOMAIN}    client without a phone (purchase answered, rental pending, visit declined)
+Visitor requests (no account), follow-up links:
+  ${guestLinks.map((l) => 'http://localhost:5173' + l).join('\n  ')}
 Remove everything with: node scripts/demo/cleanup.mjs`)

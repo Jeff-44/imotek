@@ -95,7 +95,9 @@ public class RequestsApiTests
         var forRent = await ListingAsync(agent);
         var forSale = await ListingAsync(agent, "Sale");
 
-        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(_api.Anonymous(), forRent, new { type = "Visit" })).StatusCode);
+        // Visitors: contact details required; purchases need an account.
+        Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(_api.Anonymous(), forRent, new { type = "Visit" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await SendAsync(_api.Anonymous(), forSale, new { type = "Purchase" })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(client, forRent, new { type = "Purchase" })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(client, forSale, new { type = "Rental" })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await SendAsync(client, forSale, new { type = "Purchase", shareClientPhone = true })).StatusCode);
@@ -142,7 +144,8 @@ public class RequestsApiTests
         var propertyId = await ListingAsync(agent);
         var phone = (await MeAsync(agent)).PhoneNumber!;
 
-        Assert.Equal(HttpStatusCode.Unauthorized, (await _api.Anonymous().GetAsync($"/api/properties/{propertyId}/contact", _ct)).StatusCode);
+        var publicContact = await _api.Anonymous().GetFromJsonAsync<AgentContactResponse>($"/api/properties/{propertyId}/contact", PostgresApiFixture.Json, _ct);
+        Assert.Equal(phone, publicContact!.PhoneNumber);
         var contact = await client.GetFromJsonAsync<AgentContactResponse>($"/api/properties/{propertyId}/contact", PostgresApiFixture.Json, _ct);
         Assert.Equal(phone, contact!.PhoneNumber);
 

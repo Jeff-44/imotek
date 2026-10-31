@@ -221,6 +221,34 @@ public class AgentApprovalApiTests
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync("/api/properties", Listing(), _ct)).StatusCode);
     }
 
+    [Fact]
+    public async Task Concurrent_admin_decisions_keep_one_and_refuse_the_others_with_409()
+    {
+        var admin = await _api.AdminAsync();
+
+        for (var round = 0; round < 5; round++)
+        {
+            var (_, userId) = await _api.RegisterAsync(requestAgent: true);
+            var decisions = new Func<Task<HttpResponseMessage>>[]
+            {
+                () => admin.PostAsync($"/api/admin/agent-requests/{userId}/approve", null, _ct),
+                () => admin.PostAsJsonAsync($"/api/admin/agent-requests/{userId}/reject", new { reason = "Doublon" }, _ct),
+                () => admin.PostAsync($"/api/admin/agent-requests/{userId}/approve", null, _ct),
+                () => admin.PostAsJsonAsync($"/api/admin/agent-requests/{userId}/reject", new { reason = "Doublon" }, _ct),
+            };
+
+            var responses = await Task.WhenAll(decisions.Select(d => d()));
+
+            var winner = Assert.Single(responses, r => r.StatusCode == HttpStatusCode.OK);
+            Assert.All(responses.Where(r => r != winner), r => Assert.Equal(HttpStatusCode.Conflict, r.StatusCode));
+            var decided = await winner.Content.ReadFromJsonAsync<AgentAccountResponse>(PostgresApiFixture.Json, _ct);
+            var stored = (await admin.GetFromJsonAsync<List<AgentAccountResponse>>(
+                $"/api/admin/agent-requests?status={decided!.AgentStatus}", PostgresApiFixture.Json, _ct))!.Single(a => a.Id == userId);
+            Assert.Equal(decided.AgentStatus, stored.AgentStatus);
+            Assert.Equal(decided.AgentStatus == AgentStatus.Approved, stored.Roles.Contains(Roles.Agent));
+        }
+    }
+
     // ---- Legacy agents (like example@gmail.com) ------------------------------
 
     [Fact]

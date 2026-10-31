@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router'
 import { notificationsApi } from '../api/requests'
 import { useAuth } from '../auth/useAuth'
@@ -10,13 +10,27 @@ export function Header() {
   const navigate = useNavigate()
   const close = () => setOpen(false)
   const unread = useUnreadCount(user?.id ?? null)
+  const { pathname } = useLocation()
+  const loggingOut = useRef(false)
+
+  // Sign out only once the home page is shown. Signing out in the same click lets a protected
+  // page redirect to the login page first, remembering itself as "from": the next person to sign
+  // in on this browser would be sent to it.
+  useEffect(() => {
+    if (loggingOut.current && pathname === '/') {
+      loggingOut.current = false
+      logout()
+    }
+  }, [pathname, logout])
 
   function handleLogout() {
-    // Leave the page first: otherwise a protected page redirects to the login page while
-    // remembering itself as "from", and the next person to sign in is sent to it.
     close()
+    if (pathname === '/') {
+      logout()
+      return
+    }
+    loggingOut.current = true
     navigate('/', { replace: true })
-    logout()
   }
 
   return (

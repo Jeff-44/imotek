@@ -1363,3 +1363,22 @@ textarea.input {
   font-weight: 400;
   color: var(--text);
 }
+
+.request-form__row {
+  display: grid;
+  gap: 14px;
+}
+
+@media (min-width: 560px) {
+  .request-form__row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.alert p + p {
+  margin-top: 6px;
+}
+
+.alert [data-testid='tracking-link'] {
+  overflow-wrap: anywhere;
+}

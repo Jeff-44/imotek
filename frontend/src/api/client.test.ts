@@ -83,6 +83,56 @@ describe('apiFetch token handling', () => {
     expect(getToken()).toBeNull()
   })
 
+  it('keeps the session when the refresh is rate limited, with the Retry-After delay', async () => {
+    setTokens({ accessToken: 'expired', refreshToken: 'r1' })
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    responses.push(json(401), new Response(null, { status: 429, headers: { 'Retry-After': '20' } }))
+
+    const error = (await apiFetch('/api/requests/mine').catch((e: unknown) => e)) as ApiError
+
+    expect(error.status).toBe(429)
+    expect(error.retryAfter).toBe(20)
+    expect(error.isTemporary).toBe(true)
+    expect(error.message).toBe('Trop de requêtes. Réessayez dans 20 s.')
+    expect(expired).not.toHaveBeenCalled()
+    expect(getToken()).toBe('expired')
+  })
+
+  it('keeps the session when the refresh hits a server error or no network', async () => {
+    setTokens({ accessToken: 'expired', refreshToken: 'r1' })
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    responses.push(json(401), json(503))
+
+    await expect(apiFetch('/api/requests/mine')).rejects.toMatchObject({ status: 503 })
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url === '/api/auth/refresh') throw new TypeError('Failed to fetch')
+        return json(401)
+      }),
+    )
+    await expect(apiFetch('/api/requests/mine')).rejects.toMatchObject({ status: 0, isTemporary: true })
+
+    expect(expired).not.toHaveBeenCalled()
+    expect(getToken()).toBe('expired')
+  })
+
+  it('reports a rate-limited or failing request as temporary, without touching the tokens', async () => {
+    setTokens({ accessToken: 'a1', refreshToken: 'r1' })
+    responses.push(new Response(null, { status: 429, headers: { 'Retry-After': '7' } }), json(500, { title: 'boom' }))
+
+    const limited = (await apiFetch('/api/properties').catch((e: unknown) => e)) as ApiError
+    const failed = (await apiFetch('/api/properties').catch((e: unknown) => e)) as ApiError
+
+    expect([limited.status, limited.retryAfter]).toEqual([429, 7])
+    expect(failed.isTemporary).toBe(true)
+    expect(calls.map((c) => c.url)).toEqual(['/api/properties', '/api/properties'])
+    expect(getToken()).toBe('a1')
+  })
+
   it('does not try to refresh when the user was not signed in', async () => {
     responses.push(json(401, { title: 'Invalid email or password.' }))
 

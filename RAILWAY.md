@@ -66,7 +66,9 @@ Le navigateur ne parle qu'à `imotek-web`. Ce choix a plusieurs conséquences :
 | `DATABASE_URL` | `${{imotek-db.DATABASE_URL}}` | Référence Railway (réseau privé). Convertie automatiquement en chaîne Npgsql. |
 | `PORT` | `8080` | Fixé explicitement pour que `imotek-web` puisse y faire référence |
 | `RAILWAY_RUN_UID` | `0` | Le volume est monté en root. L'entrypoint prépare `/app/data` puis **redescend à l'utilisateur `app`** (uid 1654). Sans cette variable, l'API refuse de démarrer avec un message explicite. |
-| `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | `true` | Fait confiance aux en-têtes `X-Forwarded-*` posés par nginx (IP client, HTTPS) |
+| `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | `true` | Fait confiance aux en-têtes `X-Forwarded-*` posés par nginx (IP client, HTTPS), **uniquement** depuis les réseaux privés (loopback, `10/8`, `172.16/12`, `192.168/16`, IPv6 `fc00::/7`, dont le réseau privé Railway) et sur un seul saut. Un client ne peut donc pas choisir son IP pour contourner le rate limiting. |
+| `ForwardedHeaders__KnownNetworks__0` | *(facultatif)* | Remplace les réseaux de confiance par défaut, ex. `fd12::/16`. `ForwardedHeaders__KnownProxies__0` pour une adresse précise. |
+| `RateLimiting__RequestPermitLimit` | *(facultatif, défaut 5)* | Demandes de visite/location/achat par minute et par utilisateur ou IP (anti-spam des formulaires publics). |
 | `Security__HttpsRedirection` | `false` | TLS est terminé par Railway, qui redirige déjà HTTP vers HTTPS |
 | `AllowedHosts` | `<domaine-web>;healthcheck.railway.app` | Ex. `imotek-web-production.up.railway.app;healthcheck.railway.app`. Le healthcheck Railway utilise ce nom d'hôte. Ajouter le domaine personnalisé le moment venu. |
 | `Cors__AllowedOrigins__0` | `https://<domaine-web>` | Origine exacte, sans `/` final. Pas indispensable en même origine, mais restrictif si l'API est un jour appelée directement. |

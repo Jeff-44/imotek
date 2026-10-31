@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useLocation } from 'react-router'
 import { ApiError } from '../api/client'
-import { contactLinks, localInputToIso, requestsApi, type RequestType } from '../api/requests'
+import { contactLinks, localDateTimeToIso, requestsApi, type RequestType } from '../api/requests'
 import type { Property } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { useApi } from '../useApi'
@@ -13,49 +13,27 @@ const requestLabels: Record<RequestType, string> = {
   Visit: 'Demander une visite',
 }
 
+type Sent = { type: RequestType; trackingToken: string | null }
+
 /**
- * Contact and request buttons of a listing. Only what applies is shown: rental for a property for rent,
- * purchase for one for sale, a visit for both, and nothing once the property is no longer available.
+ * Contact and request buttons of a listing, open to visitors without an account: the agent's number
+ * (when they agreed to show it), a visit for any listing, a rental for one for rent. A purchase request
+ * needs an account. Nothing is shown to the owner, nor once the property is no longer available.
  * The API applies the same rules.
  */
 export function PropertyActions({ property }: { property: Property }) {
-  const { user } = useAuth()
+  const { user, hasRole } = useAuth()
   const location = useLocation()
+  const [open, setOpen] = useState<RequestType | null>(null)
+  const [sent, setSent] = useState<Sent | null>(null)
 
   if (property.status !== 'Available') return null
   if (user?.id === property.ownerId) return null
 
-  if (!user) {
-    return (
-      <section className="actions-card" aria-labelledby="actions-title">
-        <h2 id="actions-title" className="actions-card__title">
-          Intéressé par ce bien ?
-        </h2>
-        <p>
-          Connectez-vous pour contacter l’agent,{' '}
-          {property.transactionType === 'Rent' ? 'demander une location' : 'faire une demande d’achat'} ou demander une
-          visite.
-        </p>
-        <div className="actions-card__buttons">
-          <Link to="/connexion" state={{ from: location.pathname }} className="button">
-            Se connecter
-          </Link>
-          <Link to="/inscription" state={{ from: location.pathname }} className="button button--ghost">
-            Créer un compte
-          </Link>
-        </div>
-      </section>
-    )
-  }
-
-  return <SignedInActions property={property} />
-}
-
-function SignedInActions({ property }: { property: Property }) {
-  const { hasRole } = useAuth()
-  const [open, setOpen] = useState<RequestType | null>(null)
-  const [sent, setSent] = useState<RequestType | null>(null)
+  const canRequest = !user || hasRole('Client')
   const types: RequestType[] = [property.transactionType === 'Rent' ? 'Rental' : 'Purchase', 'Visit']
+  // Purchases need an account: a visitor is offered to sign in instead.
+  const purchaseNeedsAccount = !user && property.transactionType === 'Sale'
 
   return (
     <section className="actions-card" aria-labelledby="actions-title">
@@ -65,45 +43,79 @@ function SignedInActions({ property }: { property: Property }) {
 
       <AgentContactCard propertyId={property.id} />
 
-      {sent && (
-        <p className="alert alert--success" role="status">
-          Votre demande a été envoyée à l’agent. Suivez sa réponse dans <Link to="/mes-demandes">Mes demandes</Link>.
-        </p>
-      )}
+      {sent && <SentConfirmation sent={sent} signedIn={Boolean(user)} />}
 
-      {hasRole('Client') ? (
+      {canRequest ? (
         <>
           <div className="actions-card__buttons">
-            {types.map((type) => (
-              <button
-                key={type}
-                type="button"
-                className={type === 'Visit' ? 'button button--ghost' : 'button'}
-                aria-expanded={open === type}
-                onClick={() => setOpen(open === type ? null : type)}
-              >
-                {requestLabels[type]}
-              </button>
-            ))}
+            {types.map((type) =>
+              type === 'Purchase' && purchaseNeedsAccount ? (
+                <Link key={type} to="/connexion" state={{ from: location.pathname }} className="button">
+                  Se connecter pour demander à acheter
+                </Link>
+              ) : (
+                <button
+                  key={type}
+                  type="button"
+                  className={type === 'Visit' ? 'button button--ghost' : 'button'}
+                  aria-expanded={open === type}
+                  onClick={() => setOpen(open === type ? null : type)}
+                >
+                  {requestLabels[type]}
+                </button>
+              ),
+            )}
           </div>
           {open && (
             <RequestForm
               key={open}
               propertyId={property.id}
               type={open}
-              onSent={(type) => {
-                setSent(type)
+              onSent={(result) => {
+                setSent(result)
                 // Close only the form that was sent, not one the user opened meanwhile.
-                setOpen((current) => (current === type ? null : current))
+                setOpen((current) => (current === result.type ? null : current))
               }}
               onCancel={() => setOpen(null)}
             />
+          )}
+          {!user && (
+            <p className="field__hint">
+              Pas besoin de compte pour une visite ou une location.{' '}
+              <Link to="/inscription" state={{ from: location.pathname }}>
+                Créer un compte
+              </Link>{' '}
+              permet de retrouver toutes vos demandes.
+            </p>
           )}
         </>
       ) : (
         <p className="field__hint">Les demandes de location, d’achat et de visite sont réservées aux comptes clients.</p>
       )}
     </section>
+  )
+}
+
+function SentConfirmation({ sent, signedIn }: { sent: Sent; signedIn: boolean }) {
+  const link = sent.trackingToken ? `/suivi/${sent.trackingToken}` : null
+  return (
+    <div className="alert alert--success" role="status">
+      <p>Votre demande a été envoyée à l’agent.</p>
+      {signedIn && (
+        <p>
+          Suivez sa réponse dans <Link to="/mes-demandes">Mes demandes</Link>.
+        </p>
+      )}
+      {link && (
+        <p>
+          L’agent vous contactera par téléphone ou par e-mail. Pour suivre sa réponse, conservez ce lien personnel :{' '}
+          <Link to={link} data-testid="tracking-link">
+            {window.location.origin}
+            {link}
+          </Link>
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -145,38 +157,51 @@ export function ContactLinks({ phone }: { phone: string }) {
   )
 }
 
-/** Earliest value for the visit picker: the next full hour, in local time. */
-function nextHourLocal(): string {
-  const date = new Date()
-  date.setMinutes(0, 0, 0)
-  date.setHours(date.getHours() + 1)
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:00`
+const pad = (n: number) => String(n).padStart(2, '0')
+const localDate = (date: Date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
+
+const numberOrUndefined = (value: FormDataEntryValue | null) => {
+  const text = String(value ?? '').trim()
+  return text === '' ? undefined : Number(text)
 }
 
-type RequestFormProps = { propertyId: string; type: RequestType; onSent: (type: RequestType) => void; onCancel: () => void }
+type RequestFormProps = {
+  propertyId: string
+  type: RequestType
+  onSent: (sent: Sent) => void
+  onCancel: () => void
+}
 
 function RequestForm({ propertyId, type, onSent, onCancel }: RequestFormProps) {
   const { user } = useAuth()
   const [error, setError] = useState<ApiError | null>(null)
   const [pending, setPending] = useState(false)
+  const guest = !user
   const hasPhone = Boolean(user?.phoneNumber)
   const formId = `request-${type.toLowerCase()}`
+  const [today] = useState(() => localDate(new Date()))
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const data = new FormData(event.currentTarget)
-    const visitAt = String(data.get('visitAt') ?? '')
+    const text = (name: string) => String(data.get(name) ?? '').trim()
     setPending(true)
     setError(null)
     try {
-      await requestsApi.send(propertyId, {
+      const created = await requestsApi.send(propertyId, {
         type,
-        message: String(data.get('message') ?? '').trim() || undefined,
-        shareClientPhone: data.get('shareClientPhone') === 'on',
-        visitAt: type === 'Visit' && visitAt ? localInputToIso(visitAt) : undefined,
+        message: text('message') || undefined,
+        shareClientPhone: guest || data.get('shareClientPhone') === 'on',
+        visitAt: type === 'Visit' && text('visitDate') && text('visitTime') ? localDateTimeToIso(text('visitDate'), text('visitTime')) : undefined,
+        fullName: guest ? text('fullName') : undefined,
+        email: guest ? text('email') : undefined,
+        phoneNumber: guest ? text('phoneNumber') : undefined,
+        currentAddress: type === 'Rental' ? text('currentAddress') || undefined : undefined,
+        durationMonths: type === 'Rental' ? numberOrUndefined(data.get('durationMonths')) : undefined,
+        moveInDate: type === 'Rental' ? text('moveInDate') || undefined : undefined,
+        occupants: type === 'Rental' ? numberOrUndefined(data.get('occupants')) : undefined,
       })
-      onSent(type)
+      onSent({ type, trackingToken: created.trackingToken ?? null })
     } catch (err) {
       setError(err instanceof ApiError ? err : new ApiError(0, 'Une erreur est survenue.'))
     } finally {
@@ -185,6 +210,7 @@ function RequestForm({ propertyId, type, onSent, onCancel }: RequestFormProps) {
   }
 
   const errors = error?.fieldErrors ?? {}
+  const id = (name: string) => `${formId}-${name}`
 
   return (
     <form className="request-form" onSubmit={onSubmit} aria-label={requestLabels[type]}>
@@ -194,22 +220,57 @@ function RequestForm({ propertyId, type, onSent, onCancel }: RequestFormProps) {
         </p>
       )}
 
-      {type === 'Visit' && (
-        <FormField id={`${formId}-date`} label="Date et heure souhaitées" errors={errors.visitAt}>
-          <input
-            id={`${formId}-date`}
-            name="visitAt"
-            type="datetime-local"
-            className="input"
-            min={nextHourLocal()}
-            required
-          />
-        </FormField>
+      {guest && (
+        <>
+          <FormField id={id('name')} label="Nom complet" errors={errors.fullName}>
+            <input id={id('name')} name="fullName" className="input" autoComplete="name" required maxLength={150} />
+          </FormField>
+          <div className="request-form__row">
+            <FormField id={id('phone')} label="Numéro de téléphone" errors={errors.phoneNumber} hint="Par exemple +509 3712 3456.">
+              <input id={id('phone')} name="phoneNumber" type="tel" className="input" autoComplete="tel" inputMode="tel" required />
+            </FormField>
+            <FormField id={id('email')} label="Adresse e-mail" errors={errors.email}>
+              <input id={id('email')} name="email" type="email" className="input" autoComplete="email" required maxLength={256} />
+            </FormField>
+          </div>
+        </>
       )}
 
-      <FormField id={`${formId}-message`} label="Message (facultatif)" errors={errors.message}>
+      {type === 'Visit' && (
+        <div className="request-form__row">
+          <FormField id={id('date')} label="Date souhaitée" errors={errors.visitAt}>
+            <input id={id('date')} name="visitDate" type="date" className="input" min={today} required />
+          </FormField>
+          <FormField id={id('time')} label="Heure souhaitée">
+            <input id={id('time')} name="visitTime" type="time" className="input" step={900} required />
+          </FormField>
+        </div>
+      )}
+
+      {type === 'Rental' && (
+        <>
+          <div className="request-form__row">
+            <FormField id={id('move-in')} label="Date d’entrée souhaitée" errors={errors.moveInDate}>
+              <input id={id('move-in')} name="moveInDate" type="date" className="input" min={today} required />
+            </FormField>
+            <FormField id={id('duration')} label="Durée souhaitée (mois)" errors={errors.durationMonths}>
+              <input id={id('duration')} name="durationMonths" type="number" className="input" min={1} max={120} required />
+            </FormField>
+          </div>
+          <div className="request-form__row">
+            <FormField id={id('occupants')} label="Nombre de personnes (facultatif)" errors={errors.occupants}>
+              <input id={id('occupants')} name="occupants" type="number" className="input" min={1} max={50} />
+            </FormField>
+            <FormField id={id('address')} label="Adresse actuelle (facultatif)" errors={errors.currentAddress}>
+              <input id={id('address')} name="currentAddress" className="input" autoComplete="street-address" maxLength={250} />
+            </FormField>
+          </div>
+        </>
+      )}
+
+      <FormField id={id('message')} label="Message pour l’agent (facultatif)" errors={errors.message}>
         <textarea
-          id={`${formId}-message`}
+          id={id('message')}
           name="message"
           className="input"
           rows={3}
@@ -218,22 +279,26 @@ function RequestForm({ propertyId, type, onSent, onCancel }: RequestFormProps) {
         />
       </FormField>
 
-      <div className={errors.shareClientPhone ? 'field field--invalid' : 'field'}>
-        <label className="checkbox">
-          <input type="checkbox" name="shareClientPhone" disabled={!hasPhone} />
-          <span>
-            {hasPhone
-              ? `Partager mon numéro (${user!.phoneNumber}) avec l’agent pour cette demande.`
-              : 'Pour partager votre numéro avec l’agent, ajoutez-le d’abord dans '}
-            {!hasPhone && <Link to="/compte">Mon compte</Link>}
-          </span>
-        </label>
-        {errors.shareClientPhone?.map((message) => (
-          <p key={message} className="field__error">
-            {message}
-          </p>
-        ))}
-      </div>
+      {guest ? (
+        <p className="field__hint">Vos coordonnées sont transmises uniquement à l’agent de ce bien, pour vous répondre.</p>
+      ) : (
+        <div className={errors.shareClientPhone ? 'field field--invalid' : 'field'}>
+          <label className="checkbox">
+            <input type="checkbox" name="shareClientPhone" disabled={!hasPhone} />
+            <span>
+              {hasPhone
+                ? `Partager mon numéro (${user!.phoneNumber}) avec l’agent pour cette demande.`
+                : 'Pour partager votre numéro avec l’agent, ajoutez-le d’abord dans '}
+              {!hasPhone && <Link to="/compte">Mon compte</Link>}
+            </span>
+          </label>
+          {errors.shareClientPhone?.map((message) => (
+            <p key={message} className="field__error">
+              {message}
+            </p>
+          ))}
+        </div>
+      )}
 
       <div className="request-form__actions">
         <button type="submit" className="button" disabled={pending}>

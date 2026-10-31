@@ -6,12 +6,13 @@ import {
   requestsApi,
   requestStatusLabels,
   requestTypeLabels,
+  type ActionInput,
   type ClientRequest,
   type RequestAction,
   type RequestStatus,
   type RequestType,
 } from '../api/requests'
-import { formatDateTime } from '../format'
+import { formatDate, formatDateTime } from '../format'
 import { ContactLinks } from './PropertyActions'
 import { EmptyState } from './EmptyState'
 
@@ -81,7 +82,7 @@ export function RequestList({ requests, viewer, onChanged }: { requests: ClientR
       ) : (
         <ul className="request-list">
           {shown.map((request) => (
-            <RequestItem key={request.id} request={request} viewer={viewer} onChanged={onChanged} />
+            <RequestCard key={request.id} request={request} viewer={viewer} onChanged={onChanged} />
           ))}
         </ul>
       )}
@@ -89,7 +90,16 @@ export function RequestList({ requests, viewer, onChanged }: { requests: ClientR
   )
 }
 
-function RequestItem({ request, viewer, onChanged }: { request: ClientRequest; viewer: Viewer; onChanged: () => void }) {
+type RequestCardProps = {
+  request: ClientRequest
+  viewer: Viewer
+  onChanged: () => void
+  /** How actions reach the API; defaults to the signed-in endpoints (the follow-up page uses its link). */
+  perform?: (action: RequestAction, input: ActionInput) => Promise<unknown>
+}
+
+/** One request with its details and the actions the viewer may take. */
+export function RequestCard({ request, viewer, onChanged, perform }: RequestCardProps) {
   const [message, setMessage] = useState('')
   const [proposedAt, setProposedAt] = useState('')
   const [busy, setBusy] = useState<RequestAction | null>(null)
@@ -106,10 +116,11 @@ function RequestItem({ request, viewer, onChanged }: { request: ClientRequest; v
     setBusy(action)
     setError(null)
     try {
-      await requestsApi.act(request.id, action, {
+      const input: ActionInput = {
         message: viewer === 'agent' ? message.trim() || undefined : undefined,
         proposedVisitAt: action === 'ProposeDate' ? localInputToIso(proposedAt) : undefined,
-      })
+      }
+      await (perform ? perform(action, input) : requestsApi.act(request.id, action, input))
       setMessage('')
       onChanged()
     } catch (err) {
@@ -120,12 +131,19 @@ function RequestItem({ request, viewer, onChanged }: { request: ClientRequest; v
   }
 
   const party = viewer === 'agent' ? request.client : request.agent
+  const rentalDetails = [
+    request.moveInDate && `Entrée souhaitée : ${formatDate(request.moveInDate)}`,
+    request.durationMonths && `Durée : ${request.durationMonths} mois`,
+    request.occupants && `${request.occupants} personne${request.occupants > 1 ? 's' : ''}`,
+    request.currentAddress && viewer === 'agent' && `Adresse actuelle : ${request.currentAddress}`,
+  ].filter(Boolean)
 
   return (
     <li className="request-item" data-testid="request-item">
       <div className="request-item__header">
         <span className="tag tag--accent">{requestTypeLabels[request.type]}</span>
         <RequestStatusBadge status={request.status} />
+        {request.isGuest && viewer === 'agent' && <span className="tag">Visiteur sans compte</span>}
         <span className="request-item__date">Envoyée le {formatDateTime(request.createdAt)}</span>
       </div>
 
@@ -146,10 +164,12 @@ function RequestItem({ request, viewer, onChanged }: { request: ClientRequest; v
         </p>
       )}
 
+      {rentalDetails.length > 0 && <p className="request-item__meta">{rentalDetails.join(' · ')}</p>}
+
       {party && viewer === 'agent' && (
         <div className="request-item__party">
           <p>
-            Client : <strong>{party.fullName}</strong>
+            {request.isGuest ? 'Visiteur' : 'Client'} : <strong>{party.fullName}</strong>
             {party.email && (
               <>
                 {' '}

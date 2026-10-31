@@ -26,6 +26,16 @@ export type ClientRequest = {
   agent: RequestParty | null
   /** What the current user may do now. */
   allowedActions: RequestAction[]
+  /** Sent by a visitor without an account: `client` holds the details they typed. */
+  isGuest: boolean
+  // Rental requests only.
+  currentAddress: string | null
+  durationMonths: number | null
+  /** yyyy-mm-dd */
+  moveInDate: string | null
+  occupants: number | null
+  /** Only in the answer to a visitor's new request: the secret of their follow-up link. */
+  trackingToken?: string | null
 }
 
 export type NewRequest = {
@@ -34,6 +44,16 @@ export type NewRequest = {
   shareClientPhone: boolean
   /** ISO date with its offset, visits only. */
   visitAt?: string
+  // Visitors without an account.
+  fullName?: string
+  email?: string
+  phoneNumber?: string
+  // Rentals.
+  currentAddress?: string
+  durationMonths?: number
+  /** yyyy-mm-dd */
+  moveInDate?: string
+  occupants?: number
 }
 
 export type ActionInput = { message?: string; proposedVisitAt?: string }
@@ -102,6 +122,12 @@ export const requestsApi = {
 
   received: (signal?: AbortSignal) => apiFetch<ClientRequest[]>('/api/requests/received', { signal }),
 
+  /** A visitor's request, through their private follow-up link. */
+  track: (token: string, signal?: AbortSignal) => apiFetch<ClientRequest>(`/api/requests/track/${id(token)}`, { signal }),
+
+  actAsGuest: (token: string, action: RequestAction) =>
+    apiFetch<ClientRequest>(`/api/requests/track/${id(token)}/${actionPaths[action]}`, { method: 'POST' }),
+
   act: (requestId: string, action: RequestAction, input: ActionInput = {}) =>
     apiFetch<ClientRequest>(`/api/requests/${id(requestId)}/${actionPaths[action]}`, {
       method: 'POST',
@@ -128,4 +154,9 @@ export function contactLinks(phoneE164: string) {
 /** Value for <input type="datetime-local"> → ISO string with the browser's offset. */
 export function localInputToIso(value: string): string {
   return new Date(value).toISOString()
+}
+
+/** A date (yyyy-mm-dd) and a time (hh:mm) typed in local time → ISO string. */
+export function localDateTimeToIso(date: string, time: string): string {
+  return new Date(`${date}T${time}`).toISOString()
 }

@@ -40,6 +40,14 @@ public enum RequestAction
     AcceptProposal,
 }
 
+/// <summary>Contact details of a visitor who sends a request without an account (already validated and normalized).</summary>
+public sealed record GuestContact(string FullName, string Email, string PhoneNumber)
+{
+    public const int FullNameMaxLength = 150;
+    public const int EmailMaxLength = 256;
+    public const int PhoneMaxLength = 32;
+}
+
 /// <summary>
 /// What a client asks the owner of a property: to rent it, to buy it, or to visit it.
 /// Each kind is its own entity (and table) with its own lifecycle; this base holds what they share.
@@ -59,16 +67,29 @@ public abstract class ClientRequest
     }
 
     protected ClientRequest(Guid propertyId, Guid ownerId, Guid clientId, string? message, bool shareClientPhone, DateTime utcNow)
+        : this(propertyId, ownerId, clientId, guest: null, message, shareClientPhone, utcNow)
+    {
+    }
+
+    /// <summary>Either a signed-in client (<paramref name="clientId"/>) or a visitor without an account (<paramref name="guest"/>).</summary>
+    protected ClientRequest(Guid propertyId, Guid ownerId, Guid? clientId, GuestContact? guest, string? message, bool shareClientPhone, DateTime utcNow)
     {
         var errors = new Dictionary<string, string[]>();
-        if (propertyId == Guid.Empty || ownerId == Guid.Empty || clientId == Guid.Empty)
+        if (propertyId == Guid.Empty || ownerId == Guid.Empty || (clientId is null) == (guest is null) || clientId == Guid.Empty)
         {
-            errors[nameof(PropertyId)] = ["A request needs a property, its owner and a client."];
+            errors[nameof(PropertyId)] = ["A request needs a property, its owner, and either a client or a visitor's contact details."];
         }
 
         if (ownerId == clientId)
         {
             errors[nameof(ClientId)] = ["You cannot send a request about your own property."];
+        }
+
+        if (guest is not null)
+        {
+            RequireText(errors, nameof(GuestName), guest.FullName, GuestContact.FullNameMaxLength);
+            RequireText(errors, nameof(GuestEmail), guest.Email, GuestContact.EmailMaxLength);
+            RequireText(errors, nameof(GuestPhone), guest.PhoneNumber, GuestContact.PhoneMaxLength);
         }
 
         AddMessageError(errors, nameof(Message), message);
@@ -81,8 +102,12 @@ public abstract class ClientRequest
         PropertyId = propertyId;
         OwnerId = ownerId;
         ClientId = clientId;
+        GuestName = guest?.FullName.Trim();
+        GuestEmail = guest?.Email.Trim();
+        GuestPhone = guest?.PhoneNumber.Trim();
         Message = Clean(message);
-        ShareClientPhone = shareClientPhone;
+        // A visitor gives their number in the form precisely so that the agent can call back.
+        ShareClientPhone = guest is not null || shareClientPhone;
         Status = RequestStatus.Pending;
         CreatedAt = utcNow;
         UpdatedAt = utcNow;
@@ -94,7 +119,18 @@ public abstract class ClientRequest
     /// <summary>Owner of the property when the request was made: the only agent who may see and answer it.</summary>
     public Guid OwnerId { get; private set; }
 
-    public Guid ClientId { get; private set; }
+    /// <summary>The signed-in client, or null for a visitor without an account (see the Guest fields).</summary>
+    public Guid? ClientId { get; private set; }
+
+    public string? GuestName { get; private set; }
+    public string? GuestEmail { get; private set; }
+    public string? GuestPhone { get; private set; }
+
+    /// <summary>SHA-256 of the private link given to a visitor to follow their request. Never the link itself.</summary>
+    public string? GuestAccessTokenHash { get; private set; }
+
+    public bool IsGuest => ClientId is null;
+
     public string? Message { get; private set; }
 
     /// <summary>The client agreed to show their phone number to the owner, for this request only.</summary>
@@ -132,6 +168,17 @@ public abstract class ClientRequest
         }
 
         Transition(action, agentMessage, utcNow);
+    }
+
+    /// <summary>Visitors only, once: stores the hash of their private follow-up link.</summary>
+    public void IssueGuestAccess(string tokenHash)
+    {
+        if (!IsGuest || GuestAccessTokenHash is not null)
+        {
+            throw new InvalidOperationException("Only a visitor's request gets a follow-up link, and only once.");
+        }
+
+        GuestAccessTokenHash = tokenHash;
     }
 
     public static void AddMessageError(IDictionary<string, string[]> errors, string field, string? message)
@@ -173,6 +220,18 @@ public abstract class ClientRequest
         }
 
         UpdatedAt = utcNow;
+    }
+
+    private static void RequireText(Dictionary<string, string[]> errors, string field, string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            errors[field] = [$"{field} is required."];
+        }
+        else if (value.Trim().Length > maxLength)
+        {
+            errors[field] = [$"{field} must be at most {maxLength} characters."];
+        }
     }
 
     protected static IReadOnlyCollection<RequestStatus> From(params RequestStatus[] statuses) => statuses;

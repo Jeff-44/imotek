@@ -302,11 +302,20 @@ internal sealed class IdentityAuthService(
         return ToResponse(user, roles.ToList());
     }
 
+    public const string ConcurrencyMessage = "This account was changed at the same time by someone else. Reload and try again.";
+
     internal static Error ToError(IdentityResult result)
     {
         if (result.Errors.Any(e => e.Code is nameof(IdentityErrorDescriber.DuplicateEmail) or nameof(IdentityErrorDescriber.DuplicateUserName)))
         {
             return Error.Conflict("An account with this email already exists.");
+        }
+
+        // The account changed since it was read (Identity's ConcurrencyStamp), typically two admins
+        // deciding at the same time: the first decision stands, the second is refused, nothing is overwritten.
+        if (result.Errors.Any(e => e.Code == nameof(IdentityErrorDescriber.ConcurrencyFailure)))
+        {
+            return Error.Conflict(ConcurrencyMessage);
         }
 
         var errors = result.Errors

@@ -10,6 +10,7 @@ namespace Imotek.Tests.Api;
 public class SecurityTests(SecurityTests.Factory factory) : IClassFixture<SecurityTests.Factory>
 {
     public const int AuthLimit = 3;
+    public const int RequestLimit = 2;
     public const string AllowedOrigin = "https://app.imotek.test";
 
     public sealed class Factory : WebApplicationFactory<Program>
@@ -20,6 +21,7 @@ public class SecurityTests(SecurityTests.Factory factory) : IClassFixture<Securi
             builder.UseSetting($"ConnectionStrings:{DependencyInjection.ConnectionStringName}",
                 "Host=127.0.0.1;Port=1;Database=x;Username=x;Password=x;Timeout=1");
             builder.UseSetting("RateLimiting:AuthPermitLimit", AuthLimit.ToString());
+            builder.UseSetting("RateLimiting:RequestPermitLimit", RequestLimit.ToString());
             builder.UseSetting("Cors:AllowedOrigins:0", AllowedOrigin);
         }
     }
@@ -40,6 +42,23 @@ public class SecurityTests(SecurityTests.Factory factory) : IClassFixture<Securi
 
         Assert.All(statuses.Take(AuthLimit), s => Assert.Equal(HttpStatusCode.BadRequest, s));
         Assert.All(statuses.Skip(AuthLimit), s => Assert.Equal(HttpStatusCode.TooManyRequests, s));
+    }
+
+    [Fact]
+    public async Task Public_request_endpoint_is_rate_limited()
+    {
+        var client = factory.CreateClient();
+        var path = $"/api/properties/{Guid.NewGuid()}/requests";
+
+        // No database here: what the first calls answer does not matter, only the limiter.
+        var statuses = new List<HttpStatusCode>();
+        for (var i = 0; i < RequestLimit + 2; i++)
+        {
+            statuses.Add((await client.PostAsJsonAsync(path, new { type = "Visit" }, _ct)).StatusCode);
+        }
+
+        Assert.All(statuses.Take(RequestLimit), s => Assert.NotEqual(HttpStatusCode.TooManyRequests, s));
+        Assert.All(statuses.Skip(RequestLimit), s => Assert.Equal(HttpStatusCode.TooManyRequests, s));
     }
 
     [Fact]

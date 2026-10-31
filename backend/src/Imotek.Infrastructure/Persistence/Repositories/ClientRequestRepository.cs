@@ -35,6 +35,22 @@ internal sealed class ClientRequestRepository(ImotekDbContext db) : IClientReque
         return set.AnyAsync(r => r.PropertyId == propertyId && r.ClientId == clientId && active.Contains(r.Status), cancellationToken);
     }
 
+    public Task<bool> HasActiveGuestAsync(RequestType type, Guid propertyId, string email, CancellationToken cancellationToken)
+    {
+        IQueryable<ClientRequest> set = type switch
+        {
+            RequestType.Rental => db.Set<RentalRequest>(),
+            RequestType.Purchase => db.Set<PurchaseRequest>(),
+            _ => db.Set<VisitRequest>(),
+        };
+        var active = ClientRequest.ActiveStatuses.ToList();
+        var normalized = email.Trim().ToLowerInvariant();
+        return set.AnyAsync(r => r.PropertyId == propertyId && r.ClientId == null && r.GuestEmail == normalized && active.Contains(r.Status), cancellationToken);
+    }
+
+    public Task<ClientRequest?> GetByGuestTokenHashAsync(string tokenHash, CancellationToken cancellationToken) =>
+        db.ClientRequests.FirstOrDefaultAsync(r => r.GuestAccessTokenHash == tokenHash, cancellationToken);
+
     public void Add(ClientRequest request) => db.ClientRequests.Add(request);
 
     public void AddNotification(Notification notification) => db.Notifications.Add(notification);

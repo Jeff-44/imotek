@@ -3,6 +3,7 @@ using Imotek.Application.Requests;
 using Imotek.Domain.Notifications;
 using Imotek.Domain.Properties;
 using Imotek.Domain.Requests;
+using Imotek.Infrastructure.Identity;
 using Imotek.Tests.TestSupport;
 
 namespace Imotek.Tests.Application;
@@ -29,7 +30,7 @@ public class ClientRequestServiceTests
         _users.Add(OtherClient);
     }
 
-    private ClientRequestService As(ICurrentUser user) => new(_store, _properties, _users, user, _time);
+    private ClientRequestService As(ICurrentUser user) => new(_store, _properties, _users, user, _time, new PhoneNumberNormalizer());
 
     private static FakeCurrentUser ClientUser(Guid id) => new(id, Roles.Client);
 
@@ -77,11 +78,13 @@ public class ClientRequestServiceTests
     {
         var property = Seed();
 
+        // Visitors without an account must give their contact details (see the guest tests below).
         var anonymous = await As(FakeCurrentUser.Anonymous).CreateAsync(property.Id, Body(RequestType.Rental), _ct);
         var adminOnly = await As(FakeCurrentUser.Admin(Guid.NewGuid())).CreateAsync(property.Id, Body(RequestType.Rental), _ct);
         var agent = await As(AgentUser(OtherAgent)).CreateAsync(property.Id, Body(RequestType.Rental), _ct);
 
-        Assert.Equal(ErrorType.Unauthorized, anonymous.Error!.Type);
+        Assert.Equal(ErrorType.Validation, anonymous.Error!.Type);
+        Assert.Contains("FullName", anonymous.Error.ValidationErrors!.Keys);
         Assert.Equal(ErrorType.Forbidden, adminOnly.Error!.Type);
         Assert.True(agent.IsSuccess);
     }

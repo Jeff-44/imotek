@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { authApi, type RegisterInput } from '../api/auth'
-import { getToken, setSessionExpiredHandler, setTokens } from '../api/client'
+import { ApiError, getToken, setSessionExpiredHandler, setTokens } from '../api/client'
 import type { User } from '../api/types'
 import { AuthContext, type AuthState } from './context'
+
+const RESTORE_RETRIES = 3
+const RESTORE_RETRY_SECONDS = 3
+const MAX_RESTORE_WAIT_SECONDS = 30
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
@@ -28,16 +32,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearSession])
 
   // Restore the session from stored tokens (an expired access token is renewed automatically).
+  // A temporary failure (rate limit, server error, no network) keeps the tokens and retries a
+  // few times, waiting as long as Retry-After asks; only a refused session signs the user out.
   useEffect(() => {
     if (!getToken()) return
     let active = true
-    authApi
-      .me()
-      .then((me) => active && setUser(me))
-      .catch(() => active && clearSession())
-      .finally(() => active && setLoading(false))
+    let timer: number | undefined
+
+    const attempt = (remaining: number) => {
+      authApi
+        .me()
+        .then((me) => {
+          if (!active) return
+          setUser(me)
+          setLoading(false)
+        })
+        .catch((error: unknown) => {
+          if (!active) return
+          const temporary = error instanceof ApiError && error.isTemporary
+          if (temporary && remaining > 0) {
+            const delay = Math.min(error.retryAfter ?? RESTORE_RETRY_SECONDS, MAX_RESTORE_WAIT_SECONDS) * 1000
+            timer = window.setTimeout(() => attempt(remaining - 1), delay)
+            return
+          }
+          if (!temporary) clearSession()
+          setLoading(false)
+        })
+    }
+
+    attempt(RESTORE_RETRIES)
     return () => {
       active = false
+      window.clearTimeout(timer)
     }
   }, [clearSession])
 

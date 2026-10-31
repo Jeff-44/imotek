@@ -17,8 +17,8 @@ public sealed class VisitRequest : ClientRequest
     {
     }
 
-    private VisitRequest(Guid propertyId, Guid ownerId, Guid clientId, string? message, bool shareClientPhone, DateTime visitAt, DateTime utcNow)
-        : base(propertyId, ownerId, clientId, message, shareClientPhone, utcNow)
+    private VisitRequest(Guid propertyId, Guid ownerId, Guid? clientId, GuestContact? guest, string? message, bool shareClientPhone, DateTime visitAt, DateTime utcNow)
+        : base(propertyId, ownerId, clientId, guest, message, shareClientPhone, utcNow)
     {
         VisitAt = visitAt;
     }
@@ -35,7 +35,15 @@ public sealed class VisitRequest : ClientRequest
     {
         RequestRules.EnsureRequestable(property, transactionType: null);
         EnsureValidDate(nameof(VisitAt), visitAt, utcNow);
-        return new VisitRequest(property.Id, property.OwnerId, clientId, message, shareClientPhone, visitAt, utcNow);
+        return new VisitRequest(property.Id, property.OwnerId, clientId, null, message, shareClientPhone, visitAt, utcNow);
+    }
+
+    /// <summary>A visitor without an account, who leaves their contact details.</summary>
+    public static VisitRequest CreateForGuest(Property property, GuestContact guest, string? message, DateTime visitAt, DateTime utcNow)
+    {
+        RequestRules.EnsureRequestable(property, transactionType: null);
+        EnsureValidDate(nameof(VisitAt), visitAt, utcNow);
+        return new VisitRequest(property.Id, property.OwnerId, null, guest, message, shareClientPhone: true, visitAt, utcNow);
     }
 
     public static string? ValidateDate(DateTime visitAt, DateTime utcNow)

@@ -125,6 +125,13 @@ internal sealed class InMemoryRequestStore : IClientRequestRepository, INotifica
     public Task<bool> HasActiveAsync(RequestType type, Guid propertyId, Guid clientId, CancellationToken cancellationToken) =>
         Task.FromResult(Requests.Any(r => r.Type == type && r.PropertyId == propertyId && r.ClientId == clientId && r.IsActive));
 
+    public Task<bool> HasActiveGuestAsync(RequestType type, Guid propertyId, string email, CancellationToken cancellationToken) =>
+        Task.FromResult(Requests.Any(r => r.Type == type && r.PropertyId == propertyId && r.IsGuest
+            && string.Equals(r.GuestEmail, email, StringComparison.OrdinalIgnoreCase) && r.IsActive));
+
+    public Task<ClientRequest?> GetByGuestTokenHashAsync(string tokenHash, CancellationToken cancellationToken) =>
+        Task.FromResult(Requests.FirstOrDefault(r => r.GuestAccessTokenHash == tokenHash));
+
     public void Add(ClientRequest request) => _pending.Add(request);
 
     public void AddNotification(Notification notification) => Notifications.Add(notification);

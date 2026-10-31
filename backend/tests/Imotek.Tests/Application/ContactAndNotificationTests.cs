@@ -19,7 +19,7 @@ public class ContactAndNotificationTests
     private readonly FixedTimeProvider _time = new(PropertyTestData.Now);
     private readonly CancellationToken _ct = TestContext.Current.CancellationToken;
 
-    private AgentContactService Contacts(ICurrentUser user) => new(_properties, _users, user);
+    private AgentContactService Contacts(ICurrentUser user) => new(_properties, _users);
 
     private NotificationService Notifications(Guid userId) => new(_store, FakeCurrentUser.Client(userId), _time);
 
@@ -45,13 +45,23 @@ public class ContactAndNotificationTests
     }
 
     [Fact]
-    public async Task Anonymous_visitors_get_nothing()
+    public async Task Visitors_without_an_account_see_a_consented_number_too()
     {
         _users.Add(Owner, "+50937000001", consent: true, approvedAgent: true);
 
         var contact = await Contacts(FakeCurrentUser.Anonymous).GetAsync(Seed().Id, _ct);
 
-        Assert.Equal(ErrorType.Unauthorized, contact.Error!.Type);
+        Assert.Equal("+50937000001", contact.Value.PhoneNumber);
+    }
+
+    [Fact]
+    public async Task Visitors_without_an_account_never_see_a_number_without_consent()
+    {
+        _users.Add(Owner, "+50937000001", consent: false, approvedAgent: true);
+
+        var contact = await Contacts(FakeCurrentUser.Anonymous).GetAsync(Seed().Id, _ct);
+
+        Assert.Null(contact.Value.PhoneNumber);
     }
 
     [Theory]

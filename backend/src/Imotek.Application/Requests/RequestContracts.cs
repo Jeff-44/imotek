@@ -16,6 +16,12 @@ public interface IClientRequestRepository
 
     Task<bool> HasActiveAsync(RequestType type, Guid propertyId, Guid clientId, CancellationToken cancellationToken);
 
+    /// <summary>An open request of this kind from a visitor with this email (case-insensitive) on this property.</summary>
+    Task<bool> HasActiveGuestAsync(RequestType type, Guid propertyId, string email, CancellationToken cancellationToken);
+
+    /// <summary>Returns a tracked visitor request by the hash of its follow-up link, or null.</summary>
+    Task<ClientRequest?> GetByGuestTokenHashAsync(string tokenHash, CancellationToken cancellationToken);
+
     void Add(ClientRequest request);
 
     void AddNotification(Notification notification);
@@ -49,6 +55,17 @@ public sealed record CreateRequestBody
 
     /// <summary>Visits only. Must carry its time zone offset.</summary>
     public DateTimeOffset? VisitAt { get; init; }
+
+    // Visitors without an account: their contact details (required then, ignored when signed in).
+    public string? FullName { get; init; }
+    public string? Email { get; init; }
+    public string? PhoneNumber { get; init; }
+
+    // Rentals: required for visitors, optional for signed-in clients.
+    public string? CurrentAddress { get; init; }
+    public int? DurationMonths { get; init; }
+    public DateOnly? MoveInDate { get; init; }
+    public int? Occupants { get; init; }
 }
 
 /// <summary>Body of the action endpoints. <see cref="ProposedVisitAt"/> is required to propose a date.</summary>
@@ -78,7 +95,20 @@ public sealed record ClientRequestResponse(
     RequestParty? Client,
     RequestParty? Agent,
     /// <summary>What the caller may do now, so the interface shows only valid buttons.</summary>
-    IReadOnlyList<RequestAction> AllowedActions);
+    IReadOnlyList<RequestAction> AllowedActions)
+{
+    /// <summary>Sent by a visitor without an account; the agent reaches them with the contact details in <see cref="Client"/>.</summary>
+    public bool IsGuest { get; init; }
+
+    // Rental requests only.
+    public string? CurrentAddress { get; init; }
+    public int? DurationMonths { get; init; }
+    public DateOnly? MoveInDate { get; init; }
+    public int? Occupants { get; init; }
+
+    /// <summary>Only in the answer to a visitor's new request: the secret of their private follow-up link. Never stored.</summary>
+    public string? TrackingToken { get; init; }
+}
 
 public sealed record NotificationResponse(
     Guid Id,

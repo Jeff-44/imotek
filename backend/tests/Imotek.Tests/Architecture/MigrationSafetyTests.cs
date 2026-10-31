@@ -12,7 +12,11 @@ namespace Imotek.Tests.Architecture;
 /// </summary>
 public class MigrationSafetyTests
 {
-    private static readonly HashSet<string> ReviewedExceptions = [];
+    /// <summary>
+    /// 20261031204126_AllowGuestRequests: ClientId becomes nullable (requests from visitors without an
+    /// account). Only NOT NULL is dropped, same type: no data can be lost (checked by the test below).
+    /// </summary>
+    private static readonly HashSet<string> ReviewedExceptions = ["20261031204126_AllowGuestRequests"];
 
     public static TheoryData<string> Migrations()
     {
@@ -44,6 +48,27 @@ public class MigrationSafetyTests
         {
             Assert.Empty(destructive);
         }
+    }
+
+    [Fact]
+    public void AllowGuestRequests_only_relaxes_ClientId_to_nullable()
+    {
+        using var context = CreateContext();
+        var assembly = context.GetService<IMigrationsAssembly>();
+        var migration = assembly.CreateMigration(assembly.Migrations["20261031204126_AllowGuestRequests"], "Npgsql.EntityFrameworkCore.PostgreSQL");
+
+        var altered = migration.UpOperations.OfType<AlterColumnOperation>().ToList();
+
+        Assert.Equal(3, altered.Count);
+        Assert.All(altered, op =>
+        {
+            Assert.Equal("ClientId", op.Name);
+            Assert.True(op.IsNullable);
+            Assert.False(op.OldColumn.IsNullable);
+            Assert.Equal(op.OldColumn.ClrType, op.ClrType);
+            Assert.Equal(op.OldColumn.ColumnType, op.ColumnType);
+        });
+        Assert.DoesNotContain(migration.UpOperations, op => op is DropTableOperation or DropColumnOperation or RenameColumnOperation or SqlOperation);
     }
 
     private static bool IsDestructiveSql(string sql)

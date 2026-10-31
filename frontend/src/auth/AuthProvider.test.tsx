@@ -53,3 +53,52 @@ describe('logout', () => {
     expect(new Headers(revoke?.init.headers).get('Authorization')).toBe('Bearer a1')
   })
 })
+
+describe('session restore', () => {
+  beforeEach(() => vi.stubGlobal('localStorage', memoryStorage()))
+
+  function Probe({ onAuth }: { onAuth: (value: AuthState | null) => void }) {
+    const value = useContext(AuthContext)
+    useEffect(() => onAuth(value), [value, onAuth])
+    return null
+  }
+
+  it('retries after a temporary failure instead of signing the user out', async () => {
+    setTokens({ accessToken: 'a1', refreshToken: 'r1' })
+    let meCalls = 0
+    mockFetch(() => (++meCalls === 1 ? new Response(null, { status: 503, headers: { 'Retry-After': '0' } }) : json(200, makeUser())))
+    let auth: AuthState | null = null
+    render(
+      <AuthProvider>
+        <Probe
+          onAuth={(value) => {
+            auth = value
+          }}
+        />
+      </AuthProvider>,
+    )
+
+    await waitFor(() => expect(auth?.user?.email).toBe('user@imotek.test'))
+    expect(meCalls).toBe(2)
+    expect(getToken()).toBe('a1')
+  })
+
+  it('signs out when the session is refused', async () => {
+    setTokens({ accessToken: 'a1', refreshToken: 'revoked' })
+    mockFetch(() => json(401))
+    let auth: AuthState | null = null
+    render(
+      <AuthProvider>
+        <Probe
+          onAuth={(value) => {
+            auth = value
+          }}
+        />
+      </AuthProvider>,
+    )
+
+    await waitFor(() => expect(auth?.loading).toBe(false))
+    expect(auth!.user).toBeNull()
+    expect(getToken()).toBeNull()
+  })
+})

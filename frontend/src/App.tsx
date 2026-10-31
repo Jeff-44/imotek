@@ -14,6 +14,7 @@ import { PropertiesPage } from './pages/PropertiesPage'
 import { PropertyDetailPage } from './pages/PropertyDetailPage'
 import { PropertyFormPage } from './pages/PropertyFormPage'
 import { MyRequestsPage, ReceivedRequestsPage } from './pages/RequestsPages'
+import { TrackingPage } from './pages/TrackingPage'
 
 function App() {
   return (
@@ -24,6 +25,7 @@ function App() {
             <Route index element={<HomePage />} />
             <Route path="biens" element={<PropertiesPage />} />
             <Route path="biens/:id" element={<PropertyDetailPage />} />
+            <Route path="suivi/:token" element={<TrackingPage />} />
             <Route path="connexion" element={<LoginPage />} />
             <Route path="inscription" element={<RegisterPage />} />
             <Route

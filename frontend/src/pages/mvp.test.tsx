@@ -1,14 +1,20 @@
 // @vitest-environment jsdom
-import { screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 import { describe, expect, it, vi } from 'vitest'
 import { contactLinks, type ClientRequest } from '../api/requests'
+import { AuthContext } from '../auth/context'
+import { RequireRole } from '../auth/RequireRole'
 import type { Property } from '../api/types'
 import { Header } from '../components/Header'
 import { PropertyActions } from '../components/PropertyActions'
 import { RequestList } from '../components/RequestList'
 import { authState, json, makeUser, mockFetch, renderWithAuth } from '../test/render'
+import { MyRequestsPage } from './RequestsPages'
 import { DashboardPage } from './DashboardPage'
+import { TrackingPage } from './TrackingPage'
 
 function makeProperty(overrides: Partial<Property> = {}): Property {
   return {
@@ -55,6 +61,11 @@ function makeRequest(overrides: Partial<ClientRequest> = {}): ClientRequest {
     client: null,
     agent: null,
     allowedActions: [],
+    isGuest: false,
+    currentAddress: null,
+    durationMonths: null,
+    moveInDate: null,
+    occupants: null,
     ...overrides,
   }
 }
@@ -63,14 +74,69 @@ const buttonNames = () => screen.queryAllByRole('button').map((b) => b.textConte
 const contact = (phoneNumber: string | null) => json(200, { agentName: 'Jean Agent', phoneNumber })
 
 describe('Property actions', () => {
-  it('asks visitors to sign in and shows no request or contact', () => {
-    const calls = mockFetch(() => contact('+50937123456'))
+  it('lets visitors without an account see the number and ask for a rental or a visit', async () => {
+    mockFetch(() => contact('+50937123456'))
     renderWithAuth(<PropertyActions property={makeProperty()} />, authState(null))
 
-    expect(screen.getByRole('link', { name: 'Se connecter' }).getAttribute('href')).toBe('/connexion')
+    expect((await screen.findByRole('link', { name: 'Appeler' })).getAttribute('href')).toBe('tel:+50937123456')
+    expect(buttonNames()).toEqual(['Demander une location', 'Demander une visite'])
     expect(screen.getByRole('link', { name: 'Créer un compte' })).toBeTruthy()
-    expect(buttonNames()).toEqual([])
-    expect(calls).toHaveLength(0)
+  })
+
+  it('asks visitors to sign in for a purchase only', async () => {
+    mockFetch(() => contact(null))
+    renderWithAuth(<PropertyActions property={makeProperty({ transactionType: 'Sale' })} />, authState(null))
+
+    await screen.findByText('Jean Agent')
+    expect(screen.getByRole('link', { name: 'Se connecter pour demander à acheter' }).getAttribute('href')).toBe('/connexion')
+    expect(buttonNames()).toEqual(['Demander une visite'])
+  })
+
+  it('a visitor sends a visit request with their contact details and gets a follow-up link', async () => {
+    const calls = mockFetch((url) =>
+      url.endsWith('/contact') ? contact(null) : json(201, makeRequest({ type: 'Visit', isGuest: true, trackingToken: 'tok_123' })),
+    )
+    renderWithAuth(<PropertyActions property={makeProperty()} />, authState(null))
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Demander une visite' }))
+    expect((screen.getByLabelText('Nom complet') as HTMLInputElement).required).toBe(true)
+    expect((screen.getByLabelText('Numéro de téléphone') as HTMLInputElement).required).toBe(true)
+    expect((screen.getByLabelText('Adresse e-mail') as HTMLInputElement).required).toBe(true)
+    expect(screen.queryByRole('checkbox')).toBeNull()
+    await userEvent.type(screen.getByLabelText('Nom complet'), 'Marie Joseph')
+    await userEvent.type(screen.getByLabelText('Numéro de téléphone'), '+509 3712 3456')
+    await userEvent.type(screen.getByLabelText('Adresse e-mail'), 'marie@example.com')
+    await userEvent.type(screen.getByLabelText('Date souhaitée'), '2030-01-15')
+    await userEvent.type(screen.getByLabelText('Heure souhaitée'), '10:30')
+    await userEvent.click(screen.getByRole('button', { name: 'Envoyer la demande' }))
+
+    const link = await screen.findByTestId('tracking-link')
+    expect(link.getAttribute('href')).toBe('/suivi/tok_123')
+    const body = JSON.parse(String(calls.find((c) => c.url === '/api/properties/p1/requests')!.init.body))
+    expect(body).toMatchObject({ type: 'Visit', fullName: 'Marie Joseph', email: 'marie@example.com', phoneNumber: '+509 3712 3456', shareClientPhone: true })
+    expect(body.visitAt).toBe(new Date('2030-01-15T10:30').toISOString())
+  })
+
+  it('a visitor rental request carries the move-in date, duration and household', async () => {
+    const calls = mockFetch((url) => (url.endsWith('/contact') ? contact(null) : json(201, makeRequest({ isGuest: true, trackingToken: 't' }))))
+    renderWithAuth(<PropertyActions property={makeProperty()} />, authState(null))
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Demander une location' }))
+    expect((screen.getByLabelText('Date d’entrée souhaitée') as HTMLInputElement).required).toBe(true)
+    expect((screen.getByLabelText('Durée souhaitée (mois)') as HTMLInputElement).required).toBe(true)
+    expect((screen.getByLabelText('Nombre de personnes (facultatif)') as HTMLInputElement).required).toBe(false)
+    await userEvent.type(screen.getByLabelText('Nom complet'), 'Jean Pierre')
+    await userEvent.type(screen.getByLabelText('Numéro de téléphone'), '3712 3456')
+    await userEvent.type(screen.getByLabelText('Adresse e-mail'), 'jean@example.com')
+    await userEvent.type(screen.getByLabelText('Date d’entrée souhaitée'), '2030-02-01')
+    await userEvent.type(screen.getByLabelText('Durée souhaitée (mois)'), '12')
+    await userEvent.type(screen.getByLabelText('Nombre de personnes (facultatif)'), '3')
+    await userEvent.type(screen.getByLabelText('Adresse actuelle (facultatif)'), 'Delmas 33')
+    await userEvent.click(screen.getByRole('button', { name: 'Envoyer la demande' }))
+
+    await screen.findByTestId('tracking-link')
+    const body = JSON.parse(String(calls.find((c) => c.url === '/api/properties/p1/requests')!.init.body))
+    expect(body).toMatchObject({ type: 'Rental', moveInDate: '2030-02-01', durationMonths: 12, occupants: 3, currentAddress: 'Delmas 33' })
   })
 
   it('offers rental and visit on a property for rent, never purchase', async () => {
@@ -134,8 +200,10 @@ describe('Property actions', () => {
     renderWithAuth(<PropertyActions property={makeProperty()} />, authState(makeUser({ phoneNumber: '+50937000002' })))
 
     await userEvent.click(await screen.findByRole('button', { name: 'Demander une visite' }))
-    await userEvent.type(screen.getByLabelText('Date et heure souhaitées'), '2030-01-15T10:00')
-    await userEvent.type(screen.getByLabelText('Message (facultatif)'), 'Samedi matin ?')
+    expect(screen.queryByLabelText('Nom complet')).toBeNull()
+    await userEvent.type(screen.getByLabelText('Date souhaitée'), '2030-01-15')
+    await userEvent.type(screen.getByLabelText('Heure souhaitée'), '10:00')
+    await userEvent.type(screen.getByLabelText('Message pour l’agent (facultatif)'), 'Samedi matin ?')
     await userEvent.click(screen.getByLabelText(/Partager mon numéro/))
     await userEvent.click(screen.getByRole('button', { name: 'Envoyer la demande' }))
 
@@ -144,6 +212,7 @@ describe('Property actions', () => {
     const body = JSON.parse(String(sent.init.body))
     expect(body).toMatchObject({ type: 'Visit', message: 'Samedi matin ?', shareClientPhone: true })
     expect(body.visitAt).toBe(new Date('2030-01-15T10:00').toISOString())
+    expect(body.fullName).toBeUndefined()
   })
 
   it('cannot share a phone that is not on the profile', async () => {
@@ -178,6 +247,24 @@ describe('Request lists', () => {
     await waitFor(() => expect(onChanged).toHaveBeenCalled())
     const accept = calls.find((c) => c.url === '/api/requests/r1/accept')!
     expect(JSON.parse(String(accept.init.body))).toEqual({ message: 'Bienvenue' })
+  })
+
+  it('shows the agent a visitor request with the contact details and the rental details', () => {
+    const request = makeRequest({
+      isGuest: true,
+      client: { fullName: 'Jean Pierre', email: 'jean@example.com', phoneNumber: '+50937123456' },
+      moveInDate: '2030-02-01',
+      durationMonths: 12,
+      occupants: 3,
+      currentAddress: 'Delmas 33',
+      allowedActions: ['Respond', 'Accept', 'Decline'],
+    })
+    renderWithAuth(<RequestList requests={[request]} viewer="agent" onChanged={vi.fn()} />, authState(makeUser()))
+
+    expect(screen.getByText('Visiteur sans compte')).toBeTruthy()
+    expect(screen.getByText(/Durée : 12 mois · 3 personnes · Adresse actuelle : Delmas 33/)).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Appeler' }).getAttribute('href')).toBe('tel:+50937123456')
+    expect(screen.getByRole('link', { name: 'jean@example.com' })).toBeTruthy()
   })
 
   it('tells the agent when the client did not share a phone', () => {
@@ -262,5 +349,91 @@ describe('contactLinks', () => {
       whatsApp: 'https://wa.me/12015550123',
       sms: 'sms:+12015550123',
     })
+  })
+})
+
+describe('Logout from a protected page', () => {
+  function Where() {
+    const location = useLocation()
+    return <p data-testid="where">{`${location.pathname}|${(location.state as { from?: string } | null)?.from ?? ''}`}</p>
+  }
+
+  /** Header and routes with an auth state that really signs out. */
+  function Harness() {
+    const [user, setUser] = useState<ReturnType<typeof makeUser> | null>(makeUser())
+    return (
+      <AuthContext.Provider value={authState(user, { logout: () => setUser(null) })}>
+        <MemoryRouter initialEntries={['/mes-demandes']}>
+          <Header />
+          <Where />
+          <Routes>
+            <Route path="/" element={<p>Accueil</p>} />
+            <Route path="/connexion" element={<p>Connexion</p>} />
+            <Route
+              path="/mes-demandes"
+              element={
+                <RequireRole>
+                  <MyRequestsPage />
+                </RequireRole>
+              }
+            />
+          </Routes>
+        </MemoryRouter>
+      </AuthContext.Provider>
+    )
+  }
+
+  it('goes home and leaves no page for the next person who signs in', async () => {
+    mockFetch(() => json(200, []))
+    render(<Harness />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Déconnexion' }))
+
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/|'))
+    expect(screen.getByText('Accueil')).toBeTruthy()
+    expect(screen.getByRole('link', { name: 'Connexion' })).toBeTruthy()
+  })
+})
+
+describe('Follow-up link', () => {
+  it('shows the request and accepts a new visit date through the link', async () => {
+    const rescheduled = makeRequest({
+      type: 'Visit',
+      status: 'Rescheduled',
+      visitAt: '2030-01-15T15:00:00Z',
+      proposedVisitAt: '2030-01-16T15:00:00Z',
+      agentResponse: 'Plutôt le lendemain ?',
+      agent: { fullName: 'Jean Agent', email: null, phoneNumber: null },
+      allowedActions: ['Cancel', 'AcceptProposal'],
+    })
+    const calls = mockFetch((url) =>
+      url.endsWith('/accept-proposal') ? json(200, { ...rescheduled, status: 'Accepted', allowedActions: ['Cancel'] }) : json(200, rescheduled),
+    )
+    renderWithAuth(
+      <Routes>
+        <Route path="/suivi/:token" element={<TrackingPage />} />
+      </Routes>,
+      authState(null),
+      '/suivi/tok_123',
+    )
+
+    expect(await screen.findByText('Plutôt le lendemain ?')).toBeTruthy()
+    await userEvent.click(screen.getByRole('button', { name: 'Accepter la nouvelle date' }))
+
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/requests/track/tok_123/accept-proposal')).toBe(true))
+    expect(calls[0].url).toBe('/api/requests/track/tok_123')
+  })
+
+  it('says when the link is not valid', async () => {
+    mockFetch(() => json(404, { title: 'The request was not found.' }))
+    renderWithAuth(
+      <Routes>
+        <Route path="/suivi/:token" element={<TrackingPage />} />
+      </Routes>,
+      authState(null),
+      '/suivi/wrong',
+    )
+
+    expect(await screen.findByText('Ce lien de suivi n’est pas valide.')).toBeTruthy()
   })
 })

@@ -23,21 +23,41 @@ public sealed class RequestsController(ClientRequestService requests, AgentConta
         ["accept-proposal"] = RequestAction.AcceptProposal,
     };
 
-    /// <summary>The agent's name, and phone number when the agent agreed to show it. Signed-in users only.</summary>
+    /// <summary>The agent's name, and phone number when the agent agreed to show it. Open to visitors.</summary>
     [HttpGet("api/properties/{id:guid}/contact")]
+    [AllowAnonymous]
     [EnableRateLimiting(ApiSecurity.ContactRateLimit)]
     public async Task<ActionResult<AgentContactResponse>> Contact(Guid id, CancellationToken cancellationToken) =>
         OkOrProblem(await contacts.GetAsync(id, cancellationToken));
 
-    /// <summary>Sends a request (type Rental, Purchase or Visit) about an available property.</summary>
+    /// <summary>
+    /// Sends a request (type Rental, Purchase or Visit) about an available property. Visitors without an
+    /// account may send visits and rentals with their contact details; signed-in users need the Client role.
+    /// </summary>
     [HttpPost("api/properties/{id:guid}/requests")]
-    [Authorize(Roles = Roles.Client)]
-    [EnableRateLimiting(ApiSecurity.ContactRateLimit)]
+    [AllowAnonymous]
+    [EnableRateLimiting(ApiSecurity.RequestRateLimit)]
     public async Task<ActionResult<ClientRequestResponse>> Create(Guid id, CreateRequestBody body, CancellationToken cancellationToken)
     {
         var result = await requests.CreateAsync(id, body, cancellationToken);
         return result.IsSuccess ? StatusCode(StatusCodes.Status201Created, result.Value) : ToProblem(result.Error!);
     }
+
+    /// <summary>A visitor's request, through the secret of their private follow-up link.</summary>
+    [HttpGet("api/requests/track/{token}")]
+    [AllowAnonymous]
+    [EnableRateLimiting(ApiSecurity.ContactRateLimit)]
+    public async Task<ActionResult<ClientRequestResponse>> Track(string token, CancellationToken cancellationToken) =>
+        OkOrProblem(await requests.TrackAsync(token, cancellationToken));
+
+    /// <summary>cancel, accept-proposal — for a visitor, through their private follow-up link.</summary>
+    [HttpPost("api/requests/track/{token}/{verb}")]
+    [AllowAnonymous]
+    [EnableRateLimiting(ApiSecurity.ContactRateLimit)]
+    public async Task<ActionResult<ClientRequestResponse>> ActAsGuest(string token, string verb, CancellationToken cancellationToken) =>
+        Actions.TryGetValue(verb, out var action)
+            ? OkOrProblem(await requests.ActAsGuestAsync(token, action, cancellationToken))
+            : ToProblem(Error.NotFound($"Unknown action '{verb}'."));
 
     /// <summary>Requests the caller sent.</summary>
     [HttpGet("api/requests/mine")]
