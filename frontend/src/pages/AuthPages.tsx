@@ -3,12 +3,15 @@ import { Link, Navigate, useLocation } from 'react-router'
 import { ApiError } from '../api/client'
 import type { User } from '../api/types'
 import { useAuth } from '../auth/useAuth'
+import { canOpen, defaultPageFor } from '../auth/redirects'
 import { FormField } from '../components/FormField'
 
 /** Once signed in, go back where the user came from, or to the page that fits their role. */
 function SignedInRedirect({ user }: { user: User }) {
   const from = (useLocation().state as { from?: string } | null)?.from
-  return <Navigate to={from ?? (user.roles.includes('Agent') ? '/espace-agent' : '/biens')} replace />
+  // "from" may have been recorded for the previous user of this browser (signed out on a
+  // protected page): only go back there if this user may open it.
+  return <Navigate to={from && canOpen(from, user) ? from : defaultPageFor(user)} replace />
 }
 
 function useSubmit(action: (data: FormData) => Promise<void>) {
@@ -69,12 +72,17 @@ export function LoginPage() {
 
 export function RegisterPage() {
   const { user, register } = useAuth()
+  const [requestAgent, setRequestAgent] = useState(false)
   const { error, pending, onSubmit } = useSubmit(async (data) => {
+    const phone = field(data, 'phoneNumber').trim()
     await register({
       email: field(data, 'email'),
       password: field(data, 'password'),
       fullName: field(data, 'fullName'),
-      role: field(data, 'role') === 'Agent' ? 'Agent' : 'Client',
+      requestAgent,
+      phoneNumber: phone || undefined,
+      phonePublicConsent: requestAgent && data.get('phonePublicConsent') === 'on',
+      agentRequestMessage: requestAgent ? field(data, 'agentRequestMessage').trim() || undefined : undefined,
     })
   })
 
@@ -93,18 +101,25 @@ export function RegisterPage() {
         )}
 
         <fieldset className="field">
-          <legend className="field__label">Je suis</legend>
+          <legend className="field__label">Je souhaite</legend>
           <div className="segmented">
             <label className="segmented__option">
-              <input type="radio" name="role" value="Client" defaultChecked />
-              <span>Je cherche un bien</span>
+              <input type="radio" name="accountType" value="Client" checked={!requestAgent} onChange={() => setRequestAgent(false)} />
+              <span>Chercher un bien</span>
             </label>
             <label className="segmented__option">
-              <input type="radio" name="role" value="Agent" />
-              <span>Agent / propriétaire</span>
+              <input type="radio" name="accountType" value="Agent" checked={requestAgent} onChange={() => setRequestAgent(true)} />
+              <span>Publier des annonces</span>
             </label>
           </div>
         </fieldset>
+
+        {requestAgent && (
+          <p className="alert alert--info">
+            Votre compte sera créé immédiatement. La publication d’annonces sera possible après validation de votre
+            demande par un administrateur.
+          </p>
+        )}
 
         <FormField id="register-name" label="Nom complet" errors={errors.fullName}>
           <input id="register-name" name="fullName" className="input" autoComplete="name" required maxLength={150} />
@@ -129,8 +144,51 @@ export function RegisterPage() {
           />
         </FormField>
 
+        <FormField
+          id="register-phone"
+          label={requestAgent ? 'Téléphone' : 'Téléphone (facultatif)'}
+          errors={errors.phoneNumber}
+          hint="Format international, par exemple +509 3712 3456 ou +1 305 555 1234."
+        >
+          <input
+            id="register-phone"
+            name="phoneNumber"
+            type="tel"
+            className="input"
+            autoComplete="tel"
+            inputMode="tel"
+            required={requestAgent}
+          />
+        </FormField>
+
+        {requestAgent && (
+          <>
+            <FormField id="register-message" label="Présentez votre activité (facultatif)" errors={errors.message}>
+              <textarea
+                id="register-message"
+                name="agentRequestMessage"
+                className="input"
+                rows={3}
+                maxLength={1000}
+                placeholder="Agence, zone d’activité, type de biens…"
+              />
+            </FormField>
+            <div className={errors.phonePublicConsent ? 'field field--invalid' : 'field'}>
+              <label className="checkbox">
+                <input type="checkbox" name="phonePublicConsent" required />
+                <span>J’accepte que mon numéro de téléphone soit affiché sur mes annonces publiées.</span>
+              </label>
+              {errors.phonePublicConsent?.map((message) => (
+                <p key={message} className="field__error">
+                  {message}
+                </p>
+              ))}
+            </div>
+          </>
+        )}
+
         <button type="submit" className="button" disabled={pending}>
-          {pending ? 'Création…' : 'Créer mon compte'}
+          {pending ? 'Création…' : requestAgent ? 'Créer mon compte et envoyer ma demande' : 'Créer mon compte'}
         </button>
         <p className="auth__switch">
           Déjà inscrit ? <Link to="/connexion">Se connecter</Link>

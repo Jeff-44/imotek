@@ -13,8 +13,12 @@ public sealed class PropertyService(
     ICurrentUser currentUser,
     TimeProvider timeProvider,
     IFileStorage storage,
-    IImageProcessor imageProcessor)
+    IImageProcessor imageProcessor,
+    IAgentAccess agentAccess)
 {
+    public const string ApprovalRequiredMessage =
+        "Your agent account must be approved by an administrator before you can publish or edit listings.";
+
     public const string DefaultCountry = "Haïti";
     public const int DefaultPageSize = 12;
     public const int MaxPageSize = 50;
@@ -35,6 +39,12 @@ public sealed class PropertyService(
         if (!IsAgent)
         {
             return Error.Forbidden("Only agents and owners can publish properties.");
+        }
+
+        // The Agent role alone is not enough: legacy and unapproved agents cannot publish.
+        if (!await agentAccess.CanPublishAsync(userId, cancellationToken))
+        {
+            return Error.Forbidden(ApprovalRequiredMessage);
         }
 
         var details = ToDetails(request);
@@ -64,7 +74,7 @@ public sealed class PropertyService(
     public async Task<Result<PropertyResponse>> UpdateAsync(Guid id, PropertyRequest request, CancellationToken cancellationToken)
     {
         var property = await repository.GetByIdAsync(id, cancellationToken);
-        if (Deny(property) is { } error)
+        if (await DenyContentChangeAsync(property, cancellationToken) is { } error)
         {
             return error;
         }
@@ -105,7 +115,7 @@ public sealed class PropertyService(
     public async Task<Result<PropertyResponse>> AddImageAsync(Guid id, UploadedFile file, CancellationToken cancellationToken)
     {
         var property = await repository.GetByIdAsync(id, cancellationToken);
-        if (Deny(property) is { } error)
+        if (await DenyContentChangeAsync(property, cancellationToken) is { } error)
         {
             return error;
         }
@@ -161,7 +171,7 @@ public sealed class PropertyService(
     public async Task<Result<PropertyResponse>> DeleteImageAsync(Guid id, Guid imageId, CancellationToken cancellationToken)
     {
         var property = await repository.GetByIdAsync(id, cancellationToken);
-        if (Deny(property) is { } error)
+        if (await DenyContentChangeAsync(property, cancellationToken) is { } error)
         {
             return error;
         }
@@ -341,6 +351,22 @@ public sealed class PropertyService(
             .ToDictionary(e => e.Key, e => e.Value);
 
         return errors.Count > 0 ? Error.Validation(errors) : details;
+    }
+
+    /// <summary>
+    /// <see cref="Deny"/>, plus: changing a listing's content (fields, photos) needs an approved agent.
+    /// Legacy agents can still view and remove what they own, but not edit it. Admins are not restricted.
+    /// </summary>
+    private async Task<Error?> DenyContentChangeAsync(Property? property, CancellationToken cancellationToken)
+    {
+        if (Deny(property) is { } error)
+        {
+            return error;
+        }
+
+        return IsAdmin || await agentAccess.CanPublishAsync(currentUser.UserId!.Value, cancellationToken)
+            ? null
+            : Error.Forbidden(ApprovalRequiredMessage);
     }
 
     private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

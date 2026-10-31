@@ -14,7 +14,7 @@ public class PropertySearchTests
     private readonly InMemoryPropertyRepository _repository = new();
     private readonly CancellationToken _ct = TestContext.Current.CancellationToken;
 
-    private PropertyService PublicService => new(_repository, FakeCurrentUser.Anonymous, new FixedTimeProvider(PropertyTestData.Now), new InMemoryFileStorage(), new ImageProcessor());
+    private PropertyService PublicService => new(_repository, FakeCurrentUser.Anonymous, new FixedTimeProvider(PropertyTestData.Now), new InMemoryFileStorage(), new ImageProcessor(), new FakeAgentAccess());
 
     private Property Seed(PropertyDetails details, int minutesAgo = 0)
     {

@@ -107,9 +107,36 @@ export type PropertySearch = {
 
 export type Role = 'Admin' | 'Agent' | 'Client'
 
+export const agentStatuses = ['None', 'Pending', 'Approved', 'Rejected'] as const
+export type AgentStatus = (typeof agentStatuses)[number]
+
 export type User = {
   id: string
   email: string
   fullName: string
   roles: Role[]
+  /** E.164, e.g. +50937123456 */
+  phoneNumber: string | null
+  phonePublicConsent: boolean
+  agentStatus: AgentStatus
+  agentRequestedAt: string | null
+  agentRejectionReason: string | null
+  /** Approved agent: may create listings and change their content. */
+  canPublish: boolean
+  /** Agent role without approval (account created before the workflow). */
+  isLegacyAgent: boolean
+}
+
+export type AgentAccount = {
+  id: string
+  email: string
+  fullName: string
+  roles: Role[]
+  phoneNumber: string | null
+  agentStatus: AgentStatus
+  agentRequestMessage: string | null
+  agentRequestedAt: string | null
+  agentReviewedAt: string | null
+  agentRejectionReason: string | null
+  isLegacyAgent: boolean
 }

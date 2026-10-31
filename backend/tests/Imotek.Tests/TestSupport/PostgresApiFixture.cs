@@ -8,6 +8,7 @@ using Imotek.Infrastructure.Identity;
 using Imotek.Infrastructure.Persistence;
 using Imotek.Infrastructure.Storage;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -113,23 +114,90 @@ public sealed class PostgresApiFixture : IAsyncLifetime
         return client;
     }
 
-    /// <summary>Registers a new user with a unique email and returns a client authenticated as that user.</summary>
-    public async Task<(HttpClient Client, Guid UserId)> NewUserAsync(string role)
+    /// <summary>A valid Haitian mobile number, distinct per call, for agent requests.</summary>
+    public static string NewHaitianPhone() => $"+5093{Random.Shared.Next(1000000, 9999999)}";
+
+    /// <summary>Registers a client (optionally with a pending agent request); returns the email and id.</summary>
+    public async Task<(string Email, Guid UserId)> RegisterAsync(bool requestAgent = false)
     {
-        var email = $"{role.ToLowerInvariant()}-{Guid.NewGuid():N}@imotek.test";
-        var register = await Anonymous().PostAsJsonAsync(
-            "/api/auth/register", new { email, password = UserPassword, fullName = $"Test {role}", role });
+        var email = $"{(requestAgent ? "agent" : "client")}-{Guid.NewGuid():N}@imotek.test";
+        var register = await Anonymous().PostAsJsonAsync("/api/auth/register", new
+        {
+            email,
+            password = UserPassword,
+            fullName = requestAgent ? "Test Agent" : "Test Client",
+            requestAgent,
+            phoneNumber = requestAgent ? NewHaitianPhone() : null,
+            phonePublicConsent = requestAgent,
+        });
         register.EnsureSuccessStatusCode();
         var user = await register.Content.ReadFromJsonAsync<JsonElement>();
-
-        return (await LoginAsync(email, UserPassword), user.GetProperty("id").GetGuid());
+        return (email, user.GetProperty("id").GetGuid());
     }
 
     public Task<HttpClient> AdminAsync() => LoginAsync(AdminEmail, AdminPassword);
 
-    public Task<(HttpClient Client, Guid UserId)> NewAgentAsync() => NewUserAsync(Roles.Agent);
+    /// <summary>An approved agent, through the real workflow: request at registration, admin approval, then sign-in.</summary>
+    public async Task<(HttpClient Client, Guid UserId)> NewAgentAsync()
+    {
+        var (email, userId) = await RegisterAsync(requestAgent: true);
+        var admin = await AdminAsync();
+        (await admin.PostAsync($"/api/admin/agent-requests/{userId}/approve", null)).EnsureSuccessStatusCode();
+        return (await LoginAsync(email, UserPassword), userId);
+    }
 
-    public Task<(HttpClient Client, Guid UserId)> NewClientAsync() => NewUserAsync(Roles.Client);
+    public async Task<(HttpClient Client, Guid UserId)> NewClientAsync()
+    {
+        var (email, userId) = await RegisterAsync();
+        return (await LoginAsync(email, UserPassword), userId);
+    }
+
+    /// <summary>
+    /// An account created before the approval workflow: Agent role, AgentStatus None, no phone —
+    /// like example@gmail.com. Optionally owns one available listing written directly in the database.
+    /// </summary>
+    public async Task<(HttpClient Client, Guid UserId, Guid? PropertyId)> NewLegacyAgentAsync(bool withListing = false)
+    {
+        var email = $"legacy-{Guid.NewGuid():N}@imotek.test";
+        var (userId, propertyId) = await AsyncService(async sp =>
+        {
+            var users = sp.GetRequiredService<UserManager<ApplicationUser>>();
+            var user = new ApplicationUser { UserName = email, Email = email, FullName = "Legacy Agent" };
+            (await users.CreateAsync(user, UserPassword)).ThrowIfFailed();
+            (await users.AddToRoleAsync(user, Roles.Agent)).ThrowIfFailed();
+
+            Guid? listingId = null;
+            if (withListing)
+            {
+                var db = sp.GetRequiredService<ImotekDbContext>();
+                var property = PropertyTestData.Property(user.Id, PropertyTestData.Details(title: "Annonce héritée"), DateTime.UtcNow);
+                db.Properties.Add(property);
+                await db.SaveChangesAsync();
+                listingId = property.Id;
+            }
+
+            return (user.Id, listingId);
+        });
+
+        return (await LoginAsync(email, UserPassword), userId, propertyId);
+    }
+
+    private async Task<T> AsyncService<T>(Func<IServiceProvider, Task<T>> use)
+    {
+        using var scope = _factory!.Services.CreateScope();
+        return await use(scope.ServiceProvider);
+    }
+}
+
+internal static class IdentityResultExtensions
+{
+    public static void ThrowIfFailed(this IdentityResult result)
+    {
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException(string.Join(" ", result.Errors.Select(e => e.Code)));
+        }
+    }
 }
 
 [CollectionDefinition(Name)]

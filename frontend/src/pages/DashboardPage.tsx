@@ -12,6 +12,8 @@ import { useApi } from '../useApi'
 
 export function DashboardPage() {
   const { user } = useAuth()
+  // Display only: the API refuses content changes from unapproved agents anyway.
+  const canPublish = user?.canPublish ?? false
   const { data, error, loading, reload } = useApi((signal) => propertiesApi.mine(1, signal), 'mine')
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
@@ -42,10 +44,21 @@ export function DashboardPage() {
           <h1 className="page__title">Espace agent</h1>
           <p className="page__subtitle">Bonjour {user?.fullName}. Gérez vos biens et leur statut.</p>
         </div>
-        <Link to="/espace-agent/biens/nouveau" className="button">
-          + Ajouter un bien
-        </Link>
+        {canPublish && (
+          <Link to="/espace-agent/biens/nouveau" className="button">
+            + Ajouter un bien
+          </Link>
+        )}
       </div>
+
+      {!canPublish && (
+        <p className="alert alert--warning" role="status" data-testid="approval-required">
+          {user?.isLegacyAgent
+            ? 'Compte agent existant en attente de validation par un administrateur. Vous pouvez consulter et retirer vos annonces, mais pas en publier ni en modifier. '
+            : 'Votre compte agent doit être validé par un administrateur avant de publier. '}
+          <Link to="/compte">Voir mon compte</Link>
+        </p>
+      )}
 
       {data && data.items.length > 0 && (
         <ul className="stats" aria-label="Répartition par statut">
@@ -71,9 +84,11 @@ export function DashboardPage() {
           title="Vous n’avez encore publié aucun bien"
           text="Ajoutez votre premier bien : il restera en brouillon tant que vous ne le rendez pas disponible."
           action={
-            <Link to="/espace-agent/biens/nouveau" className="button">
-              Ajouter un bien
-            </Link>
+            canPublish && (
+              <Link to="/espace-agent/biens/nouveau" className="button">
+                Ajouter un bien
+              </Link>
+            )
           }
         />
       )}
@@ -93,9 +108,11 @@ export function DashboardPage() {
                 </p>
               </div>
               <div className="manage-item__actions">
-                <Link to={`/espace-agent/biens/${property.id}/modifier`} className="button button--ghost">
-                  Modifier
-                </Link>
+                {canPublish && (
+                  <Link to={`/espace-agent/biens/${property.id}/modifier`} className="button button--ghost">
+                    Modifier
+                  </Link>
+                )}
                 <button
                   type="button"
                   className="button button--danger"

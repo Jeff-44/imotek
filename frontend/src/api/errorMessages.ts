@@ -31,6 +31,18 @@ const translations: [RegExp, (match: RegExpMatchArray) => string][] = [
   [/^The (resource|image) was not found/i, () => 'Élément introuvable.'],
   [/^An account with this email already exists/i, () => 'Un compte existe déjà avec cette adresse e-mail.'],
   [/^Authentication is required/i, () => 'Veuillez vous connecter.'],
+  [/^PhoneNumber is required for agents/i, () => 'Le numéro de téléphone est obligatoire pour publier des annonces.'],
+  [/^PhoneNumber is not a valid phone number/i, () => 'Numéro de téléphone invalide pour ce pays. Exemple : +509 3712 3456.'],
+  [/^Agents must agree to show their phone number/i, () => 'Vous devez accepter l’affichage de votre numéro sur vos annonces.'],
+  [/^Your agent account must be approved/i, () => 'Votre compte agent doit être validé par un administrateur avant de publier ou de modifier une annonce.'],
+  [/^An agent request is already pending/i, () => 'Une demande est déjà en cours d’examen.'],
+  [/^This account is already an approved agent/i, () => 'Votre compte agent est déjà validé.'],
+  [/^Administrators cannot request the agent role/i, () => 'Un administrateur ne peut pas demander le rôle agent.'],
+  [/^You cannot decide on your own agent request/i, () => 'Vous ne pouvez pas décider de votre propre demande.'],
+  [/^There is no agent request to decide/i, () => 'Aucune demande à traiter pour ce compte.'],
+  [/^The account needs a valid phone number, with consent/i, () => 'Ce compte doit d’abord renseigner un téléphone valide et accepter son affichage.'],
+  [/^A reason is required to reject/i, () => 'Indiquez le motif du refus.'],
+  [/^Message must be at most (\d+) characters/i, (m) => `${m[1]} caractères au maximum.`],
 ]
 
 export function translateError(message: string): string {

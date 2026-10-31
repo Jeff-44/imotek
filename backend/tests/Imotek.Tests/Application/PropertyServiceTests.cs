@@ -20,7 +20,7 @@ public class PropertyServiceTests
 
     private InMemoryFileStorage Storage { get; } = new();
 
-    private PropertyService ServiceFor(ICurrentUser user) => new(_repository, user, _time, Storage, new ImageProcessor());
+    private PropertyService ServiceFor(ICurrentUser user) => new(_repository, user, _time, Storage, new ImageProcessor(), new FakeAgentAccess());
 
     private Property Seed(Guid ownerId, PropertyStatus status = PropertyStatus.Available)
     {

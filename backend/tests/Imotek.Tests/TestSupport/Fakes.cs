@@ -44,6 +44,16 @@ internal sealed class FakeCurrentUser(Guid? userId, params string[] roles) : ICu
     public bool IsInRole(string role) => UserId is not null && roles.Contains(role);
 }
 
+/// <summary>Approval status of agents, as the real implementation would read it from the account store.</summary>
+internal sealed class FakeAgentAccess(bool approvedByDefault = true) : IAgentAccess
+{
+    /// <summary>Agents that hold the Agent role but are not approved (legacy or pending).</summary>
+    public HashSet<Guid> NotApproved { get; } = [];
+
+    public Task<bool> CanPublishAsync(Guid userId, CancellationToken cancellationToken) =>
+        Task.FromResult(approvedByDefault && !NotApproved.Contains(userId));
+}
+
 /// <summary>Runs the real filter (<see cref="PropertyQueryExtensions"/>) over an in-memory list.</summary>
 internal sealed class InMemoryPropertyRepository : IPropertyRepository
 {

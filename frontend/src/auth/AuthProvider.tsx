@@ -14,12 +14,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
+    // Forget the tokens first, so a reload right after logging out cannot restore the session;
+    // the server-side revocation uses the token captured here and survives page navigation.
+    const accessToken = getToken()
+    setTokens(null)
     setUser(null)
-    // Revoke the refresh tokens on the server, then forget them locally either way.
-    authApi
-      .logout()
-      .catch(() => undefined)
-      .finally(() => setTokens(null))
+    if (accessToken) authApi.revokeSession(accessToken)
   }, [])
 
   useEffect(() => {
@@ -69,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       login,
       register,
       logout,
+      updateUser: setUser,
     }),
     [user, loading, login, register, logout],
   )

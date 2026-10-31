@@ -1086,3 +1086,87 @@ textarea.input {
     grid-column: auto;
   }
 }
+
+/* Step 1 — account, agent approval, admin */
+
+.alert--info {
+  background: var(--brand-soft);
+  border-color: color-mix(in srgb, var(--brand) 30%, transparent);
+  color: var(--brand-strong);
+}
+
+.alert--warning {
+  background: var(--warning-soft);
+  border-color: color-mix(in srgb, var(--warning) 35%, transparent);
+  color: var(--warning);
+}
+
+.checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.checkbox input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--brand);
+}
+
+.account {
+  display: grid;
+  gap: 24px;
+  max-width: 720px;
+}
+
+.account__card,
+.account__form {
+  display: grid;
+  gap: 16px;
+}
+
+.account__title {
+  font-size: 1.2rem;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tabs__tab {
+  padding: 10px 14px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--text);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tabs__tab--active {
+  border-bottom-color: var(--brand);
+  color: var(--brand-strong);
+}
+
+.status--pending {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.manage-item--text {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 720px) {
+  .manage-item--text {
+    grid-template-columns: 1fr auto;
+  }
+}

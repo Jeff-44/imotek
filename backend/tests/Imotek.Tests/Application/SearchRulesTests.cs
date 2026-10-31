@@ -13,7 +13,7 @@ public class SearchRulesTests
     private readonly CancellationToken _ct = TestContext.Current.CancellationToken;
 
     private PropertyService Service =>
-        new(_repository, FakeCurrentUser.Anonymous, new FixedTimeProvider(PropertyTestData.Now), new InMemoryFileStorage(), new ImageProcessor());
+        new(_repository, FakeCurrentUser.Anonymous, new FixedTimeProvider(PropertyTestData.Now), new InMemoryFileStorage(), new ImageProcessor(), new FakeAgentAccess());
 
     private Property Seed(PropertyDetails details)
     {

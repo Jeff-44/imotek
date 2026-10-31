@@ -10,6 +10,8 @@ export type AuthState = {
   login: (email: string, password: string) => Promise<User>
   register: (input: RegisterInput) => Promise<User>
   logout: () => void
+  /** Replaces the cached user after a profile change returned by the API. */
+  updateUser: (user: User) => void
 }
 
 export const AuthContext = createContext<AuthState | null>(null)

@@ -18,7 +18,7 @@ public class PropertyImageTests
     private readonly CancellationToken _ct = TestContext.Current.CancellationToken;
 
     private PropertyService ServiceFor(ICurrentUser user) =>
-        new(_repository, user, new FixedTimeProvider(PropertyTestData.Now), _storage, new ImageProcessor());
+        new(_repository, user, new FixedTimeProvider(PropertyTestData.Now), _storage, new ImageProcessor(), new FakeAgentAccess());
 
     private Property Seed(PropertyStatus status = PropertyStatus.Available, int links = 0)
     {

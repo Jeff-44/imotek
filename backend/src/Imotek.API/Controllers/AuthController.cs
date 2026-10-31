@@ -66,4 +66,20 @@ public sealed class AuthController(IAuthService auth, ICurrentUser currentUser) 
         var user = currentUser.UserId is { } id ? await auth.GetUserAsync(id) : null;
         return user is null ? ToProblem(Error.Unauthorized()) : Ok(user);
     }
+
+    /// <summary>Updates the name and phone number (E.164-normalized). Agents must keep a phone number.</summary>
+    [HttpPut("me")]
+    [Authorize]
+    public async Task<ActionResult<UserResponse>> UpdateMe(UpdateProfileRequest request, CancellationToken cancellationToken) =>
+        currentUser.UserId is { } id
+            ? OkOrProblem(await auth.UpdateProfileAsync(id, request, cancellationToken))
+            : ToProblem(Error.Unauthorized());
+
+    /// <summary>Asks to become an agent. The Agent role is only granted when an admin approves.</summary>
+    [HttpPost("agent-request")]
+    [Authorize]
+    public async Task<ActionResult<UserResponse>> RequestAgent(AgentRequestBody request, CancellationToken cancellationToken) =>
+        currentUser.UserId is { } id
+            ? OkOrProblem(await auth.RequestAgentAsync(id, request, cancellationToken))
+            : ToProblem(Error.Unauthorized());
 }

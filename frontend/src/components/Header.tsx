@@ -10,9 +10,11 @@ export function Header() {
   const close = () => setOpen(false)
 
   function handleLogout() {
-    logout()
+    // Leave the page first: otherwise a protected page redirects to the login page while
+    // remembering itself as "from", and the next person to sign in is sent to it.
     close()
-    navigate('/')
+    navigate('/', { replace: true })
+    logout()
   }
 
   return (
@@ -47,11 +49,18 @@ export function Header() {
                 </NavLink>
               </li>
             )}
+            {hasRole('Admin') && (
+              <li>
+                <NavLink to="/admin" className="nav__link" onClick={close}>
+                  Administration
+                </NavLink>
+              </li>
+            )}
             {user ? (
               <li className="nav__user">
-                <span className="nav__name" title={user.email}>
+                <NavLink to="/compte" className="nav__name" title={`Mon compte (${user.email})`} onClick={close}>
                   {user.fullName}
-                </span>
+                </NavLink>
                 <button type="button" className="nav__link link-button" onClick={handleLogout}>
                   Déconnexion
                 </button>

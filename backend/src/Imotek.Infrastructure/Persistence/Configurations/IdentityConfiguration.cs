@@ -1,3 +1,4 @@
+using Imotek.Application.Auth;
 using Imotek.Application.Common;
 using Imotek.Infrastructure.Identity;
 using Microsoft.AspNetCore.Identity;
@@ -8,8 +9,22 @@ namespace Imotek.Infrastructure.Persistence.Configurations;
 
 internal sealed class ApplicationUserConfiguration : IEntityTypeConfiguration<ApplicationUser>
 {
-    public void Configure(EntityTypeBuilder<ApplicationUser> builder) =>
+    public void Configure(EntityTypeBuilder<ApplicationUser> builder)
+    {
         builder.Property(u => u.FullName).HasMaxLength(ApplicationUser.FullNameMaxLength).IsRequired();
+
+        // Existing accounts get "None": nobody is approved (or demoted) by the migration.
+        builder.Property(u => u.AgentStatus)
+            .HasConversion<string>()
+            .HasMaxLength(16)
+            .HasDefaultValue(AgentStatus.None)
+            .HasSentinel(AgentStatus.None)
+            .IsRequired();
+        builder.Property(u => u.PhonePublicConsent).HasDefaultValue(false);
+        builder.Property(u => u.AgentRequestMessage).HasMaxLength(AgentApproval.MessageMaxLength);
+        builder.Property(u => u.AgentRejectionReason).HasMaxLength(AgentApproval.ReasonMaxLength);
+        builder.HasIndex(u => u.AgentStatus);
+    }
 }
 
 /// <summary>Roles are reference data, created by the migration rather than at startup.</summary>

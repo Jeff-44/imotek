@@ -3,6 +3,8 @@ import { BrowserRouter, Route, Routes } from 'react-router'
 import { AuthProvider } from './auth/AuthProvider'
 import { RequireRole } from './auth/RequireRole'
 import { Layout } from './components/Layout'
+import { AccountPage } from './pages/AccountPage'
+import { AdminPage } from './pages/AdminPage'
 import { LoginPage, RegisterPage } from './pages/AuthPages'
 import { DashboardPage } from './pages/DashboardPage'
 import { HomePage } from './pages/HomePage'
@@ -43,6 +45,22 @@ function App() {
               element={
                 <RequireRole role="Agent">
                   <PropertyFormPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="compte"
+              element={
+                <RequireRole>
+                  <AccountPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="admin"
+              element={
+                <RequireRole role="Admin">
+                  <AdminPage />
                 </RequireRole>
               }
             />

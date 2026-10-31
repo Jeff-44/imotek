@@ -16,16 +16,29 @@ import {
   type PropertyInput,
   type PropertyPhoto,
 } from '../api/types'
+import { useAuth } from '../auth/useAuth'
 import { FormField } from '../components/FormField'
 import { PhotoManager } from '../components/PhotoManager'
 import { useApi } from '../useApi'
 
 export function PropertyFormPage() {
   const { id } = useParams()
+  const { user } = useAuth()
   const { data, error, loading } = useApi(
     (signal) => (id ? propertiesApi.get(id, signal) : Promise.resolve(null)),
     id ?? 'new',
   )
+
+  if (user && !user.canPublish && !user.roles.includes('Admin')) {
+    return (
+      <div className="container page">
+        <p className="alert alert--warning" role="alert">
+          Votre compte agent doit être validé par un administrateur avant de publier ou de modifier une annonce.
+        </p>
+        <Link to="/compte">Voir mon compte</Link>
+      </div>
+    )
+  }
 
   if (id && loading) return <p className="page-status" role="status">Chargement…</p>
   if (id && (error || !data)) {
