@@ -157,9 +157,10 @@ internal sealed class IdentityAuthService(
             errors[nameof(request.FullName)] = [$"FullName must be at most {ApplicationUser.FullNameMaxLength} characters."];
         }
 
-        // Agents (and pending agents) must keep a reachable number and their consent to show it.
+        // Agents (and pending agents) must keep a reachable number. A pending request keeps its consent until
+        // decided; an approved agent may withdraw it, which only hides the number (the approval stays).
         var phone = ValidatePhone(request.PhoneNumber, required: isAgentAccount, errors);
-        if (isAgentAccount && user.AgentStatus is AgentStatus.Pending or AgentStatus.Approved && !request.PhonePublicConsent)
+        if (user.AgentStatus == AgentStatus.Pending && !request.PhonePublicConsent)
         {
             errors[nameof(request.PhonePublicConsent)] = ["Agents must agree to show their phone number on their listings."];
         }

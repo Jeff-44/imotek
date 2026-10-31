@@ -46,6 +46,13 @@ public sealed class Property
     public DateTime CreatedAt { get; private set; }
     public DateTime UpdatedAt { get; private set; }
 
+    public DateTime? ArchivedAt { get; private set; }
+
+    /// <summary>The user (owner or admin) who archived the property.</summary>
+    public Guid? ArchivedBy { get; private set; }
+
+    public bool IsArchived => Status == PropertyStatus.Archived;
+
     /// <summary>Normalized title and description (see <see cref="SearchText"/>).</summary>
     public string SearchKey { get; private set; } = string.Empty;
 
@@ -80,7 +87,29 @@ public sealed class Property
 
     public bool IsOwnedBy(Guid userId) => OwnerId == userId;
 
-    public void Update(PropertyDetails details, DateTime utcNow) => Apply(details, utcNow);
+    public void Update(PropertyDetails details, DateTime utcNow)
+    {
+        if (IsArchived)
+        {
+            throw new InvalidOperationException("An archived property cannot be edited.");
+        }
+
+        Apply(details, utcNow);
+    }
+
+    /// <summary>Withdraws the property without deleting it: its photos and requests stay. Idempotent.</summary>
+    public void Archive(Guid archivedBy, DateTime utcNow)
+    {
+        if (IsArchived)
+        {
+            return;
+        }
+
+        Status = PropertyStatus.Archived;
+        ArchivedAt = utcNow;
+        ArchivedBy = archivedBy;
+        UpdatedAt = utcNow;
+    }
 
     public int PhotoCount => _images.Count + _imageUrls.Count;
 
@@ -143,6 +172,10 @@ public sealed class Property
         RequireDefined(details.TransactionType, nameof(details.TransactionType), Add);
         RequireDefined(details.Currency, nameof(details.Currency), Add);
         RequireDefined(details.Status, nameof(details.Status), Add);
+        if (details.Status == PropertyStatus.Archived)
+        {
+            Add(nameof(details.Status), "Use the archive action to archive a property.");
+        }
 
         if (details.Price <= 0 || details.Price > MaxPrice)
         {

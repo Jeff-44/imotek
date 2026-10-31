@@ -19,3 +19,9 @@ export function formatPropertyPrice(property: Pick<Property, 'price' | 'currency
 export function formatLocation(property: Pick<Property, 'city' | 'department'>): string {
   return `${property.city}, ${property.department}`
 }
+
+const dateTimeFormat = new Intl.DateTimeFormat('fr-HT', { dateStyle: 'medium', timeStyle: 'short' })
+
+export function formatDateTime(value: string): string {
+  return dateTimeFormat.format(new Date(value))
+}

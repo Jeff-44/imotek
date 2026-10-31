@@ -173,7 +173,7 @@ public class PropertyImageTests
     }
 
     [Fact]
-    public async Task Deleting_a_property_deletes_its_photo_files()
+    public async Task Archiving_a_property_keeps_its_photo_files()
     {
         var property = Seed();
         var service = ServiceFor(FakeCurrentUser.Agent(Owner));
@@ -183,6 +183,7 @@ public class PropertyImageTests
 
         Assert.True((await service.DeleteAsync(property.Id, _ct)).IsSuccess);
 
-        Assert.Empty(_storage.Files);
+        Assert.Equal(2, _storage.Files.Count);
+        Assert.Equal(2, property.Images.Count);
     }
 }

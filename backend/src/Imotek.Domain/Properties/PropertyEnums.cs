@@ -22,6 +22,9 @@ public enum PropertyStatus
     Available,
     Rented,
     Sold,
+
+    /// <summary>Withdrawn by its owner or an admin. Kept, with its history, but hidden from the public.</summary>
+    Archived,
 }
 
 public enum Currency

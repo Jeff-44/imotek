@@ -18,15 +18,15 @@ export function DashboardPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
 
-  async function handleDelete(property: Property) {
-    if (!window.confirm(`Supprimer définitivement « ${property.title} » ?`)) return
+  async function handleArchive(property: Property) {
+    if (!window.confirm(`Archiver « ${property.title} » ? L’annonce ne sera plus visible ; elle reste dans votre historique avec ses demandes.`)) return
     setDeleting(property.id)
     setDeleteError(null)
     try {
       await propertiesApi.remove(property.id)
       reload()
     } catch (err) {
-      setDeleteError(err instanceof ApiError ? err.message : 'La suppression a échoué.')
+      setDeleteError(err instanceof ApiError ? err.message : 'L’archivage a échoué.')
     } finally {
       setDeleting(null)
     }
@@ -42,13 +42,18 @@ export function DashboardPage() {
       <div className="page__header">
         <div>
           <h1 className="page__title">Espace agent</h1>
-          <p className="page__subtitle">Bonjour {user?.fullName}. Gérez vos biens et leur statut.</p>
+          <p className="page__subtitle">Bonjour {user?.fullName}. Gérez vos biens, leur statut et les demandes des clients.</p>
         </div>
-        {canPublish && (
-          <Link to="/espace-agent/biens/nouveau" className="button">
-            + Ajouter un bien
+        <div className="page__actions">
+          <Link to="/espace-agent/demandes" className="button button--ghost">
+            Demandes reçues
           </Link>
-        )}
+          {canPublish && (
+            <Link to="/espace-agent/biens/nouveau" className="button">
+              + Ajouter un bien
+            </Link>
+          )}
+        </div>
       </div>
 
       {!canPublish && (
@@ -108,19 +113,21 @@ export function DashboardPage() {
                 </p>
               </div>
               <div className="manage-item__actions">
-                {canPublish && (
+                {canPublish && property.status !== 'Archived' && (
                   <Link to={`/espace-agent/biens/${property.id}/modifier`} className="button button--ghost">
                     Modifier
                   </Link>
                 )}
-                <button
-                  type="button"
-                  className="button button--danger"
-                  onClick={() => handleDelete(property)}
-                  disabled={deleting === property.id}
-                >
-                  {deleting === property.id ? 'Suppression…' : 'Supprimer'}
-                </button>
+                {property.status !== 'Archived' && (
+                  <button
+                    type="button"
+                    className="button button--danger"
+                    onClick={() => handleArchive(property)}
+                    disabled={deleting === property.id}
+                  >
+                    {deleting === property.id ? 'Archivage…' : 'Archiver'}
+                  </button>
+                )}
               </div>
             </li>
           ))}

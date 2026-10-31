@@ -37,6 +37,7 @@ internal sealed class PropertyConfiguration : IEntityTypeConfiguration<Property>
             .IsRequired();
 
         builder.Ignore(p => p.IsPubliclyVisible);
+        builder.Ignore(p => p.IsArchived);
         builder.Ignore(p => p.PhotoCount);
         builder.Ignore(p => p.CanAddImage);
         builder.Ignore(p => p.NextImageSortOrder);

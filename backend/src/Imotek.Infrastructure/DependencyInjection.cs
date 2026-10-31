@@ -2,6 +2,7 @@ using Imotek.Application.Auth;
 using Imotek.Application.Common;
 using Imotek.Application.Images;
 using Imotek.Application.Properties;
+using Imotek.Application.Requests;
 using Imotek.Infrastructure.Identity;
 using Imotek.Infrastructure.Images;
 using Imotek.Infrastructure.Persistence;
@@ -55,7 +56,10 @@ public static class DependencyInjection
         services.AddScoped<IAgentAdministration>(sp => sp.GetRequiredService<IdentityAgentAdministration>());
         services.AddScoped<IAgentAccess>(sp => sp.GetRequiredService<IdentityAgentAdministration>());
         services.AddSingleton<IPhoneNumberNormalizer, PhoneNumberNormalizer>();
+        services.AddScoped<IUserDirectory, IdentityUserDirectory>();
         services.AddScoped<IPropertyRepository, PropertyRepository>();
+        services.AddScoped<IClientRequestRepository, ClientRequestRepository>();
+        services.AddScoped<INotificationRepository, NotificationRepository>();
 
         services.Configure<FileStorageOptions>(configuration.GetSection(FileStorageOptions.SectionName));
         services.AddSingleton<IFileStorage>(sp => new LocalFileStorage(

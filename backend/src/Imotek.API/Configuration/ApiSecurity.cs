@@ -10,6 +10,9 @@ public static class ApiSecurity
 {
     public const string AuthRateLimit = "auth";
     public const string UploadRateLimit = "uploads";
+
+    /// <summary>Agent phone numbers and new requests: per user, against scraping and spam.</summary>
+    public const string ContactRateLimit = "contact";
     public const string CorsPolicy = "frontend";
 
     public static WebApplicationBuilder AddApiSecurity(this WebApplicationBuilder builder)
@@ -51,6 +54,7 @@ public static class ApiSecurity
 
         var authPermitLimit = configuration.GetValue("RateLimiting:AuthPermitLimit", 10);
         var uploadPermitLimit = configuration.GetValue("RateLimiting:UploadPermitLimit", 30);
+        var contactPermitLimit = configuration.GetValue("RateLimiting:ContactPermitLimit", 30);
         services.AddRateLimiter(options =>
         {
             options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
@@ -63,6 +67,10 @@ public static class ApiSecurity
             options.AddPolicy(UploadRateLimit, context => RateLimitPartition.GetFixedWindowLimiter(
                 context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = uploadPermitLimit, Window = TimeSpan.FromMinutes(1) }));
+
+            options.AddPolicy(ContactRateLimit, context => RateLimitPartition.GetFixedWindowLimiter(
+                context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = contactPermitLimit, Window = TimeSpan.FromMinutes(1) }));
         });
 
         services.AddHsts(options =>

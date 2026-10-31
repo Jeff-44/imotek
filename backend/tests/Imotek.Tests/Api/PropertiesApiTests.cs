@@ -77,8 +77,12 @@ public class PropertiesApiTests
         var publicDetail = await _api.Anonymous().GetAsync($"/api/properties/{created.Id}", _ct);
         Assert.Equal(HttpStatusCode.OK, publicDetail.StatusCode);
 
+        // DELETE archives: hidden from everyone else, kept (with its history) for the owner.
         Assert.Equal(HttpStatusCode.NoContent, (await agent.DeleteAsync($"/api/properties/{created.Id}", _ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await agent.GetAsync($"/api/properties/{created.Id}", _ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await _api.Anonymous().GetAsync($"/api/properties/{created.Id}", _ct)).StatusCode);
+        var archived = await agent.GetFromJsonAsync<PropertyResponse>($"/api/properties/{created.Id}", PostgresApiFixture.Json, _ct);
+        Assert.Equal(PropertyStatus.Archived, archived!.Status);
+        Assert.Equal(HttpStatusCode.Conflict, (await agent.PutAsJsonAsync($"/api/properties/{created.Id}", Body(title: "Retour"), _ct)).StatusCode);
     }
 
     [Fact]
@@ -164,7 +168,8 @@ public class PropertiesApiTests
         Assert.Equal(ownerId, updated.OwnerId);
 
         Assert.Equal(HttpStatusCode.NoContent, (await admin.DeleteAsync($"/api/admin/properties/{other.Id}", _ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await owner.GetAsync($"/api/properties/{other.Id}", _ct)).StatusCode);
+        var archived = await owner.GetFromJsonAsync<PropertyResponse>($"/api/properties/{other.Id}", PostgresApiFixture.Json, _ct);
+        Assert.Equal(PropertyStatus.Archived, archived!.Status);
     }
 
     [Fact]

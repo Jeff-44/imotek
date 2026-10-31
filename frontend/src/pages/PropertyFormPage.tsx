@@ -5,7 +5,7 @@ import { propertiesApi } from '../api/properties'
 import {
   currencies,
   departments,
-  propertyStatuses,
+  editableStatuses,
   propertyTypeLabels,
   propertyTypes,
   statusLabels,
@@ -46,6 +46,17 @@ export function PropertyFormPage() {
       <div className="container page">
         <p className="alert alert--error" role="alert">
           {error?.status === 404 ? 'Ce bien est introuvable.' : error?.message}
+        </p>
+        <Link to="/espace-agent">← Retour à mon espace</Link>
+      </div>
+    )
+  }
+
+  if (data?.status === 'Archived') {
+    return (
+      <div className="container page">
+        <p className="alert alert--warning" role="alert">
+          Ce bien est archivé : il ne peut plus être modifié. Il reste dans votre historique avec ses demandes.
         </p>
         <Link to="/espace-agent">← Retour à mon espace</Link>
       </div>
@@ -181,7 +192,7 @@ function PropertyForm({ property }: { property: Property | null }) {
               hint="Seuls les biens « Disponible » apparaissent dans la recherche publique."
             >
               <select id="status" name="status" className="input" defaultValue={property?.status ?? 'Draft'}>
-                {propertyStatuses.map((status) => (
+                {editableStatuses.map((status) => (
                   <option key={status} value={status}>
                     {statusLabels[status]}
                   </option>

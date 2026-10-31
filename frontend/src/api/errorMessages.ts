@@ -43,6 +43,20 @@ const translations: [RegExp, (match: RegExpMatchArray) => string][] = [
   [/^The account needs a valid phone number, with consent/i, () => 'Ce compte doit d’abord renseigner un téléphone valide et accepter son affichage.'],
   [/^A reason is required to reject/i, () => 'Indiquez le motif du refus.'],
   [/^Message must be at most (\d+) characters/i, (m) => `${m[1]} caractères au maximum.`],
+  [/^You already have an open \w+ request for this property/i, () => 'Vous avez déjà une demande de ce type en cours pour ce bien.'],
+  [/^Only client accounts can send requests/i, () => 'Les demandes sont réservées aux comptes clients.'],
+  [/^You cannot send a request about your own property/i, () => 'Vous ne pouvez pas faire de demande sur votre propre bien.'],
+  [/^The property was not found or is no longer available/i, () => 'Ce bien n’est plus disponible.'],
+  [/^Rental requests are only possible on properties for rent/i, () => 'La demande de location concerne uniquement les biens à louer.'],
+  [/^Purchase requests are only possible on properties for sale/i, () => 'La demande d’achat concerne uniquement les biens à vendre.'],
+  [/^Add a phone number to your profile before sharing it/i, () => 'Ajoutez d’abord un numéro de téléphone dans « Mon compte ».'],
+  [/^The visit must be in the future/i, () => 'La date de visite doit être dans le futur.'],
+  [/^The visit must be within (\d+) days/i, (m) => `La visite doit avoir lieu dans les ${m[1]} prochains jours.`],
+  [/^The date must include its time zone/i, () => 'Date invalide.'],
+  [/^This action is not possible on/i, () => 'Cette action n’est plus possible sur cette demande. Rechargez la page.'],
+  [/^The (request|notification) was not found/i, () => 'Élément introuvable.'],
+  [/^An archived property cannot be edited/i, () => 'Ce bien est archivé : il ne peut plus être modifié.'],
+  [/^Use the archive action to archive a property/i, () => 'Utilisez le bouton « Archiver » de votre espace.'],
 ]
 
 export function translateError(message: string): string {

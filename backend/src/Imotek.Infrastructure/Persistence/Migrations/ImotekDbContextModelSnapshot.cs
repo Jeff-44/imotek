@@ -22,6 +22,48 @@ namespace Imotek.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Imotek.Domain.Notifications.Notification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("PropertyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("PropertyTitle")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "CreatedAt");
+
+                    b.ToTable("Notifications", (string)null);
+                });
+
             modelBuilder.Entity("Imotek.Domain.Properties.Property", b =>
                 {
                     b.Property<Guid>("Id")
@@ -31,6 +73,12 @@ namespace Imotek.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(250)
                         .HasColumnType("character varying(250)");
+
+                    b.Property<DateTime?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ArchivedBy")
+                        .HasColumnType("uuid");
 
                     b.Property<decimal?>("Area")
                         .HasPrecision(12, 2)
@@ -164,6 +212,55 @@ namespace Imotek.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("PropertyImages", (string)null);
+                });
+
+            modelBuilder.Entity("Imotek.Domain.Requests.ClientRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AgentResponse")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("ClientId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Message")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("OwnerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("PropertyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("ShareClientPhone")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClientId");
+
+                    b.HasIndex("OwnerId");
+
+                    b.HasIndex("PropertyId");
+
+                    b.ToTable((string)null);
+
+                    b.UseTpcMappingStrategy();
                 });
 
             modelBuilder.Entity("Imotek.Infrastructure.Identity.ApplicationUser", b =>
@@ -417,6 +514,57 @@ namespace Imotek.Infrastructure.Persistence.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Imotek.Domain.Requests.PurchaseRequest", b =>
+                {
+                    b.HasBaseType("Imotek.Domain.Requests.ClientRequest");
+
+                    b.HasIndex("PropertyId", "ClientId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_PurchaseRequests_Active_PropertyId_ClientId")
+                        .HasFilter("\"Status\" IN ('Pending', 'Responded', 'Accepted', 'Rescheduled')");
+
+                    b.ToTable("PurchaseRequests", (string)null);
+                });
+
+            modelBuilder.Entity("Imotek.Domain.Requests.RentalRequest", b =>
+                {
+                    b.HasBaseType("Imotek.Domain.Requests.ClientRequest");
+
+                    b.HasIndex("PropertyId", "ClientId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_RentalRequests_Active_PropertyId_ClientId")
+                        .HasFilter("\"Status\" IN ('Pending', 'Responded', 'Accepted', 'Rescheduled')");
+
+                    b.ToTable("RentalRequests", (string)null);
+                });
+
+            modelBuilder.Entity("Imotek.Domain.Requests.VisitRequest", b =>
+                {
+                    b.HasBaseType("Imotek.Domain.Requests.ClientRequest");
+
+                    b.Property<DateTime?>("ProposedVisitAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("VisitAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasIndex("PropertyId", "ClientId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_VisitRequests_Active_PropertyId_ClientId")
+                        .HasFilter("\"Status\" IN ('Pending', 'Responded', 'Accepted', 'Rescheduled')");
+
+                    b.ToTable("VisitRequests", (string)null);
+                });
+
+            modelBuilder.Entity("Imotek.Domain.Notifications.Notification", b =>
+                {
+                    b.HasOne("Imotek.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Imotek.Domain.Properties.Property", b =>
                 {
                     b.HasOne("Imotek.Infrastructure.Identity.ApplicationUser", null)
@@ -432,6 +580,27 @@ namespace Imotek.Infrastructure.Persistence.Migrations
                         .WithMany("Images")
                         .HasForeignKey("PropertyId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Imotek.Domain.Requests.ClientRequest", b =>
+                {
+                    b.HasOne("Imotek.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("ClientId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Imotek.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Imotek.Domain.Properties.Property", null)
+                        .WithMany()
+                        .HasForeignKey("PropertyId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

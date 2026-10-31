@@ -4,8 +4,11 @@ export type PropertyType = (typeof propertyTypes)[number]
 export const transactionTypes = ['Rent', 'Sale'] as const
 export type TransactionType = (typeof transactionTypes)[number]
 
-export const propertyStatuses = ['Draft', 'Available', 'Rented', 'Sold'] as const
+export const propertyStatuses = ['Draft', 'Available', 'Rented', 'Sold', 'Archived'] as const
 export type PropertyStatus = (typeof propertyStatuses)[number]
+
+/** Statuses an agent picks in the form; Archived has its own action. */
+export const editableStatuses = ['Draft', 'Available', 'Rented', 'Sold'] as const satisfies readonly PropertyStatus[]
 
 export const currencies = ['HTG', 'USD'] as const
 export type Currency = (typeof currencies)[number]
@@ -29,6 +32,7 @@ export const statusLabels: Record<PropertyStatus, string> = {
   Available: 'Disponible',
   Rented: 'Loué',
   Sold: 'Vendu',
+  Archived: 'Archivé',
 }
 
 /** The ten departments of Haiti. */

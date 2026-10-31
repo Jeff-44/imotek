@@ -19,6 +19,8 @@ public sealed class PropertyService(
     public const string ApprovalRequiredMessage =
         "Your agent account must be approved by an administrator before you can publish or edit listings.";
 
+    public const string ArchivedMessage = "An archived property cannot be edited.";
+
     public const string DefaultCountry = "Haïti";
     public const int DefaultPageSize = 12;
     public const int MaxPageSize = 50;
@@ -91,6 +93,10 @@ public sealed class PropertyService(
         return ToResponse(property);
     }
 
+    /// <summary>
+    /// Archives the property: it disappears from the public catalogue but nothing is deleted
+    /// (photos, requests and history stay). Owners, legacy agents included, and admins may do it.
+    /// </summary>
     public async Task<Result> DeleteAsync(Guid id, CancellationToken cancellationToken)
     {
         var property = await repository.GetByIdAsync(id, cancellationToken);
@@ -99,15 +105,8 @@ public sealed class PropertyService(
             return error;
         }
 
-        var storageKeys = property!.Images.Select(i => i.StorageKey).ToList();
-        repository.Remove(property);
+        property!.Archive(currentUser.UserId!.Value, UtcNow);
         await repository.SaveChangesAsync(cancellationToken);
-
-        // Files go only once the rows are gone, so a failed save never leaves broken photos.
-        foreach (var key in storageKeys)
-        {
-            await storage.DeleteAsync(key, cancellationToken);
-        }
 
         return Result.Success();
     }
@@ -354,7 +353,7 @@ public sealed class PropertyService(
     }
 
     /// <summary>
-    /// <see cref="Deny"/>, plus: changing a listing's content (fields, photos) needs an approved agent.
+    /// <see cref="Deny"/>, plus: archived listings are frozen, and changing a listing's content (fields, photos) needs an approved agent.
     /// Legacy agents can still view and remove what they own, but not edit it. Admins are not restricted.
     /// </summary>
     private async Task<Error?> DenyContentChangeAsync(Property? property, CancellationToken cancellationToken)
@@ -362,6 +361,11 @@ public sealed class PropertyService(
         if (Deny(property) is { } error)
         {
             return error;
+        }
+
+        if (property!.IsArchived)
+        {
+            return Error.Conflict(ArchivedMessage);
         }
 
         return IsAdmin || await agentAccess.CanPublishAsync(currentUser.UserId!.Value, cancellationToken)

@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router'
+import { useEffect, useState } from 'react'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router'
+import { notificationsApi } from '../api/requests'
 import { useAuth } from '../auth/useAuth'
 import { Logo } from './Logo'
 
@@ -8,6 +9,7 @@ export function Header() {
   const { user, hasRole, logout } = useAuth()
   const navigate = useNavigate()
   const close = () => setOpen(false)
+  const unread = useUnreadCount(user?.id ?? null)
 
   function handleLogout() {
     // Leave the page first: otherwise a protected page redirects to the login page while
@@ -49,6 +51,32 @@ export function Header() {
                 </NavLink>
               </li>
             )}
+            {hasRole('Agent') && (
+              <li>
+                <NavLink to="/espace-agent/demandes" className="nav__link" onClick={close}>
+                  Demandes reçues
+                </NavLink>
+              </li>
+            )}
+            {hasRole('Client') && (
+              <li>
+                <NavLink to="/mes-demandes" className="nav__link" onClick={close}>
+                  Mes demandes
+                </NavLink>
+              </li>
+            )}
+            {user && (
+              <li>
+                <NavLink to="/notifications" className="nav__link" onClick={close}>
+                  Notifications
+                  {unread > 0 && (
+                    <span className="nav__badge" aria-label={`${unread} non lues`}>
+                      {unread}
+                    </span>
+                  )}
+                </NavLink>
+              </li>
+            )}
             {hasRole('Admin') && (
               <li>
                 <NavLink to="/admin" className="nav__link" onClick={close}>
@@ -84,4 +112,30 @@ export function Header() {
       </div>
     </header>
   )
+}
+
+const REFRESH_MS = 60_000
+
+/** Unread notifications of the signed-in user, refreshed on navigation and every minute. */
+function useUnreadCount(userId: string | null): number {
+  const { pathname } = useLocation()
+  const [count, setCount] = useState<{ userId: string | null; value: number }>({ userId: null, value: 0 })
+
+  useEffect(() => {
+    if (!userId) return
+    const controller = new AbortController()
+    const load = () =>
+      notificationsApi
+        .list(controller.signal)
+        .then((list) => setCount({ userId, value: list.unreadCount }))
+        .catch(() => undefined)
+    load()
+    const timer = window.setInterval(load, REFRESH_MS)
+    return () => {
+      controller.abort()
+      window.clearInterval(timer)
+    }
+  }, [userId, pathname])
+
+  return count.userId === userId ? count.value : 0
 }

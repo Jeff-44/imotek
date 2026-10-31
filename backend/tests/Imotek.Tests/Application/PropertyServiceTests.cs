@@ -159,14 +159,47 @@ public class PropertyServiceTests
     // ---- Delete -------------------------------------------------------------
 
     [Fact]
-    public async Task Agent_deletes_own_property()
+    public async Task Agent_archives_own_property_instead_of_deleting_it()
     {
         var property = Seed(AgentA);
 
         var result = await ServiceFor(FakeCurrentUser.Agent(AgentA)).DeleteAsync(property.Id, _ct);
 
         Assert.True(result.IsSuccess);
-        Assert.Empty(_repository.Items);
+        Assert.Contains(property, _repository.Items);
+        Assert.Equal(PropertyStatus.Archived, property.Status);
+        Assert.Equal(AgentA, property.ArchivedBy);
+        Assert.Equal(PropertyTestData.Now, property.ArchivedAt);
+    }
+
+    [Fact]
+    public async Task Archived_property_is_hidden_from_the_public_but_kept_for_its_owner()
+    {
+        var property = Seed(AgentA);
+        await ServiceFor(FakeCurrentUser.Agent(AgentA)).DeleteAsync(property.Id, _ct);
+
+        var publicView = await ServiceFor(FakeCurrentUser.Anonymous).GetByIdAsync(property.Id, _ct);
+        var catalogue = await ServiceFor(FakeCurrentUser.Anonymous).SearchPublicAsync(new PropertySearchRequest(), _ct);
+        var mine = await ServiceFor(FakeCurrentUser.Agent(AgentA)).SearchMineAsync(new PropertySearchRequest(), _ct);
+
+        Assert.Equal(ErrorType.NotFound, publicView.Error!.Type);
+        Assert.Empty(catalogue.Value.Items);
+        Assert.Equal(PropertyStatus.Archived, Assert.Single(mine.Value.Items).Status);
+    }
+
+    [Fact]
+    public async Task Archived_property_cannot_be_edited_and_status_Archived_cannot_be_set_directly()
+    {
+        var archived = Seed(AgentA);
+        var service = ServiceFor(FakeCurrentUser.Agent(AgentA));
+        await service.DeleteAsync(archived.Id, _ct);
+
+        var edit = await service.UpdateAsync(archived.Id, PropertyTestData.Request(title: "Rouvert"), _ct);
+        var direct = await service.UpdateAsync(Seed(AgentA).Id, PropertyTestData.Request(status: PropertyStatus.Archived), _ct);
+
+        Assert.Equal(ErrorType.Conflict, edit.Error!.Type);
+        Assert.Equal(ErrorType.Validation, direct.Error!.Type);
+        Assert.Contains("status", direct.Error.ValidationErrors!.Keys, StringComparer.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -198,14 +231,16 @@ public class PropertyServiceTests
     }
 
     [Fact]
-    public async Task Admin_deletes_any_property()
+    public async Task Admin_archives_any_property()
     {
         var property = Seed(AgentA, PropertyStatus.Draft);
 
         var result = await ServiceFor(FakeCurrentUser.Admin(AdminId)).DeleteAsync(property.Id, _ct);
 
         Assert.True(result.IsSuccess);
-        Assert.Empty(_repository.Items);
+        Assert.Equal(PropertyStatus.Archived, property.Status);
+        Assert.Equal(AdminId, property.ArchivedBy);
+        Assert.Equal(AgentA, property.OwnerId);
     }
 
     [Fact]

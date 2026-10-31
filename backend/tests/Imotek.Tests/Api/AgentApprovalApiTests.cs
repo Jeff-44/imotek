@@ -272,7 +272,7 @@ public class AgentApprovalApiTests
     // ---- Profile ------------------------------------------------------------
 
     [Fact]
-    public async Task Profile_update_normalizes_the_phone_and_agents_must_keep_one()
+    public async Task Profile_update_normalizes_the_phone_agents_keep_one_and_may_withdraw_consent()
     {
         var (agent, _) = await _api.NewAgentAsync();
 
@@ -281,7 +281,24 @@ public class AgentApprovalApiTests
 
         var removed = await agent.PutAsJsonAsync("/api/auth/me", new { fullName = "Agent Renommé", phoneNumber = "", phonePublicConsent = true }, _ct);
         Assert.Equal(HttpStatusCode.BadRequest, removed.StatusCode);
+
+        // Option B: an approved agent may withdraw consent; the number is hidden but the approval stays.
         var noConsent = await agent.PutAsJsonAsync("/api/auth/me", new { fullName = "Agent Renommé", phoneNumber = "+16502530000", phonePublicConsent = false }, _ct);
+        Assert.Equal(HttpStatusCode.OK, noConsent.StatusCode);
+        var me = await MeAsync(agent);
+        Assert.False(me.PhonePublicConsent);
+        Assert.Equal(AgentStatus.Approved, me.AgentStatus);
+        Assert.True(me.CanPublish);
+    }
+
+    [Fact]
+    public async Task Pending_agent_must_keep_consent_until_the_request_is_decided()
+    {
+        var (email, _) = await _api.RegisterAsync(requestAgent: true);
+        var pending = await _api.LoginAsync(email, PostgresApiFixture.UserPassword);
+
+        var noConsent = await pending.PutAsJsonAsync("/api/auth/me", new { fullName = "En attente", phoneNumber = "+509 3712 3456", phonePublicConsent = false }, _ct);
+
         Assert.Equal(HttpStatusCode.BadRequest, noConsent.StatusCode);
     }
 

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router'
 import { propertiesApi } from '../api/properties'
 import { propertyTypeLabels, transactionLabels } from '../api/types'
 import { useAuth } from '../auth/useAuth'
+import { PropertyActions } from '../components/PropertyActions'
 import { PropertyImage } from '../components/PropertyImage'
 import { StatusBadge } from '../components/StatusBadge'
 import { formatPropertyPrice } from '../format'
@@ -85,11 +86,13 @@ export function PropertyDetailPage() {
             </dl>
           )}
 
-          {isOwner && (
+          {isOwner && property.status !== 'Archived' && (
             <Link to={`/espace-agent/biens/${property.id}/modifier`} className="button button--ghost">
               Modifier ce bien
             </Link>
           )}
+
+          <PropertyActions property={property} />
         </div>
       </div>
 

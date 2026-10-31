@@ -10,6 +10,9 @@ internal sealed class PropertyRepository(ImotekDbContext db) : IPropertyReposito
     public Task<Property?> GetByIdAsync(Guid id, CancellationToken cancellationToken) =>
         db.Properties.FirstOrDefaultAsync(p => p.Id == id, cancellationToken);
 
+    public async Task<IReadOnlyDictionary<Guid, Property>> GetByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken cancellationToken) =>
+        await db.Properties.AsNoTracking().Where(p => ids.Contains(p.Id)).ToDictionaryAsync(p => p.Id, cancellationToken);
+
     public async Task<PagedResult<Property>> SearchAsync(PropertyFilter filter, int page, int pageSize, CancellationToken cancellationToken)
     {
         var query = db.Properties.AsNoTracking().ApplyFilter(filter);
@@ -25,8 +28,6 @@ internal sealed class PropertyRepository(ImotekDbContext db) : IPropertyReposito
     }
 
     public void Add(Property property) => db.Properties.Add(property);
-
-    public void Remove(Property property) => db.Properties.Remove(property);
 
     public Task SaveChangesAsync(CancellationToken cancellationToken) => db.SaveChangesAsync(cancellationToken);
 }

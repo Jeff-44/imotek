@@ -9,9 +9,11 @@ import { LoginPage, RegisterPage } from './pages/AuthPages'
 import { DashboardPage } from './pages/DashboardPage'
 import { HomePage } from './pages/HomePage'
 import { NotFoundPage } from './pages/NotFoundPage'
+import { NotificationsPage } from './pages/NotificationsPage'
 import { PropertiesPage } from './pages/PropertiesPage'
 import { PropertyDetailPage } from './pages/PropertyDetailPage'
 import { PropertyFormPage } from './pages/PropertyFormPage'
+import { MyRequestsPage, ReceivedRequestsPage } from './pages/RequestsPages'
 
 function App() {
   return (
@@ -45,6 +47,30 @@ function App() {
               element={
                 <RequireRole role="Agent">
                   <PropertyFormPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="espace-agent/demandes"
+              element={
+                <RequireRole role="Agent">
+                  <ReceivedRequestsPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="mes-demandes"
+              element={
+                <RequireRole>
+                  <MyRequestsPage />
+                </RequireRole>
+              }
+            />
+            <Route
+              path="notifications"
+              element={
+                <RequireRole>
+                  <NotificationsPage />
                 </RequireRole>
               }
             />

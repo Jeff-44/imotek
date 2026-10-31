@@ -51,6 +51,9 @@ public sealed class Result<T> : Result
 
     public T Value => IsSuccess ? _value! : throw new InvalidOperationException("A failed result has no value.");
 
+    /// <summary>For values the implicit conversion cannot take, such as interfaces.</summary>
+    public static Result<T> From(T value) => new(value);
+
     public static implicit operator Result<T>(T value) => new(value);
 
     public static implicit operator Result<T>(Error error) => new(error);

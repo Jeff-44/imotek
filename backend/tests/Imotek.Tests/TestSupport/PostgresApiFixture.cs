@@ -62,6 +62,7 @@ public sealed class PostgresApiFixture : IAsyncLifetime
             builder.UseSetting("Logging:LogLevel:Microsoft.EntityFrameworkCore", "Warning");
             // Every test client shares one address; the limiter itself is covered by SecurityTests.
             builder.UseSetting("RateLimiting:AuthPermitLimit", "100000");
+            builder.UseSetting("RateLimiting:ContactPermitLimit", "100000");
             builder.UseSetting(FileStorageOptions.SectionName + ":RootPath", UploadRoot);
         });
 

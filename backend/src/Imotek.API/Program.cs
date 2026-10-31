@@ -4,6 +4,7 @@ using Imotek.API.Endpoints;
 using Imotek.API.Services;
 using Imotek.Application.Common;
 using Imotek.Application.Properties;
+using Imotek.Application.Requests;
 using Imotek.Infrastructure;
 using Imotek.Infrastructure.Identity;
 
@@ -23,6 +24,9 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddScoped<PropertyService>();
+builder.Services.AddScoped<ClientRequestService>();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<AgentContactService>();
 
 var app = builder.Build();
 
