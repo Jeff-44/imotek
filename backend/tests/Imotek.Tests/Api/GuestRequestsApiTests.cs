@@ -35,6 +35,23 @@ public class GuestRequestsApiTests
 
     private static string NewEmail() => $"visitor-{Guid.NewGuid():N}@example.com";
 
+    /// <summary>Follow-up calls as the page makes them: the token in a header, never in the URL.</summary>
+    private Task<HttpResponseMessage> TrackAsync(HttpClient client, string? token) =>
+        client.SendAsync(WithToken(new HttpRequestMessage(HttpMethod.Get, "/api/requests/track"), token), _ct);
+
+    private Task<HttpResponseMessage> ActAsync(HttpClient client, string? token, string verb) =>
+        client.SendAsync(WithToken(new HttpRequestMessage(HttpMethod.Post, $"/api/requests/track/{verb}"), token), _ct);
+
+    private static HttpRequestMessage WithToken(HttpRequestMessage request, string? token)
+    {
+        if (token is not null)
+        {
+            request.Headers.Add("X-Tracking-Token", token);
+        }
+
+        return request;
+    }
+
     [Fact]
     public async Task Visitor_asks_for_a_visit_the_agent_proposes_a_date_and_the_visitor_accepts_it()
     {
@@ -61,17 +78,17 @@ public class GuestRequestsApiTests
         var proposed = new DateTimeOffset(wanted.AddDays(1), TimeSpan.Zero);
         (await agent.PostAsJsonAsync($"/api/requests/{sent.Id}/propose-date", new { proposedVisitAt = proposed, message = "Le lendemain ?" }, _ct)).EnsureSuccessStatusCode();
 
-        var tracked = await visitor.GetFromJsonAsync<ClientRequestResponse>($"/api/requests/track/{sent.TrackingToken}", PostgresApiFixture.Json, _ct);
-        Assert.Equal(RequestStatus.Rescheduled, tracked!.Status);
+        var tracked = await ReadAsync(await TrackAsync(visitor, sent.TrackingToken));
+        Assert.Equal(RequestStatus.Rescheduled, tracked.Status);
         Assert.Equal("Le lendemain ?", tracked.AgentResponse);
         Assert.Null(tracked.Client);
 
-        var accepted = await ReadAsync(await visitor.PostAsync($"/api/requests/track/{sent.TrackingToken}/accept-proposal", null, _ct));
+        var accepted = await ReadAsync(await ActAsync(visitor, sent.TrackingToken, "accept-proposal"));
         Assert.Equal(RequestStatus.Accepted, accepted.Status);
         Assert.Equal(proposed.UtcDateTime, accepted.VisitAt);
 
-        Assert.Equal(HttpStatusCode.NotFound, (await visitor.GetAsync($"/api/requests/track/{GuestAccessToken.Create()}", _ct)).StatusCode);
-        Assert.Equal(HttpStatusCode.NotFound, (await visitor.PostAsync($"/api/requests/track/{sent.TrackingToken}/accept", null, _ct)).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await TrackAsync(visitor, GuestAccessToken.Create())).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await ActAsync(visitor, sent.TrackingToken, "accept")).StatusCode);
     }
 
     [Fact]
@@ -103,10 +120,10 @@ public class GuestRequestsApiTests
         (await agent.PostAsJsonAsync($"/api/requests/{first.Id}/accept", new { message = "Bienvenue." }, _ct)).EnsureSuccessStatusCode();
         (await agent.PostAsJsonAsync($"/api/requests/{second.Id}/decline", new { message = "Déjà loué." }, _ct)).EnsureSuccessStatusCode();
 
-        var firstTracked = await visitor.GetFromJsonAsync<ClientRequestResponse>($"/api/requests/track/{first.TrackingToken}", PostgresApiFixture.Json, _ct);
-        var secondTracked = await visitor.GetFromJsonAsync<ClientRequestResponse>($"/api/requests/track/{second.TrackingToken}", PostgresApiFixture.Json, _ct);
-        Assert.Equal((RequestStatus.Accepted, "Bienvenue."), (firstTracked!.Status, firstTracked.AgentResponse));
-        Assert.Equal((RequestStatus.Declined, "Déjà loué."), (secondTracked!.Status, secondTracked.AgentResponse));
+        var firstTracked = await ReadAsync(await TrackAsync(visitor, first.TrackingToken));
+        var secondTracked = await ReadAsync(await TrackAsync(visitor, second.TrackingToken));
+        Assert.Equal((RequestStatus.Accepted, "Bienvenue."), (firstTracked.Status, firstTracked.AgentResponse));
+        Assert.Equal((RequestStatus.Declined, "Déjà loué."), (secondTracked.Status, secondTracked.AgentResponse));
     }
 
     [Fact]
@@ -131,5 +148,63 @@ public class GuestRequestsApiTests
             Assert.DoesNotContain("37129999", payload);
             Assert.DoesNotContain("Visiteur Discret", payload);
         }
+    }
+
+    [Fact]
+    public async Task Invalid_missing_or_foreign_tokens_all_get_the_same_answer()
+    {
+        var (agent, _) = await _api.NewAgentAsync();
+        var propertyId = await ListingAsync(agent);
+        var visitor = _api.Anonymous();
+        var mine = await ReadAsync(await visitor.PostAsJsonAsync($"/api/properties/{propertyId}/requests", new
+        {
+            type = "Visit", fullName = "Visiteur A", email = NewEmail(), phoneNumber = "+509 3712 3456", visitAt = DateTimeOffset.UtcNow.AddDays(2),
+        }, _ct));
+        var other = await ReadAsync(await visitor.PostAsJsonAsync($"/api/properties/{propertyId}/requests", new
+        {
+            type = "Visit", fullName = "Visiteur B", email = NewEmail(), phoneNumber = "+509 3712 3457", visitAt = DateTimeOffset.UtcNow.AddDays(3),
+        }, _ct));
+
+        var answers = new[]
+        {
+            await TrackAsync(visitor, null),
+            await TrackAsync(visitor, ""),
+            await TrackAsync(visitor, "not-a-token"),
+            await TrackAsync(visitor, GuestAccessToken.Create()),
+            await visitor.GetAsync($"/api/requests/track/{GuestAccessToken.Create()}", _ct),
+            await ActAsync(visitor, null, "cancel"),
+            await ActAsync(visitor, GuestAccessToken.Create(), "cancel"),
+        };
+        var bodies = await Task.WhenAll(answers.Select(a => a.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>(_ct)));
+
+        Assert.All(answers, a => Assert.Equal(HttpStatusCode.NotFound, a.StatusCode));
+        Assert.All(bodies, b => Assert.Equal("The request was not found.", b.GetProperty("title").GetString()));
+
+        // One visitor's token opens their own request only.
+        var seen = await ReadAsync(await TrackAsync(visitor, mine.TrackingToken));
+        Assert.Equal(mine.Id, seen.Id);
+        Assert.NotEqual(other.Id, seen.Id);
+        Assert.Equal(RequestStatus.Pending, (await ReadAsync(await TrackAsync(visitor, other.TrackingToken))).Status);
+        await ReadAsync(await ActAsync(visitor, mine.TrackingToken, "cancel"));
+        Assert.Equal(RequestStatus.Pending, (await ReadAsync(await TrackAsync(visitor, other.TrackingToken))).Status);
+    }
+
+    [Fact]
+    public async Task Old_path_links_keep_working_during_the_transition()
+    {
+        var (agent, _) = await _api.NewAgentAsync();
+        var propertyId = await ListingAsync(agent);
+        var visitor = _api.Anonymous();
+        var sent = await ReadAsync(await visitor.PostAsJsonAsync($"/api/properties/{propertyId}/requests", new
+        {
+            type = "Visit", fullName = "Ancien Lien", email = NewEmail(), phoneNumber = "+509 3712 3456", visitAt = DateTimeOffset.UtcNow.AddDays(2),
+        }, _ct));
+
+        var tracked = await visitor.GetFromJsonAsync<ClientRequestResponse>($"/api/requests/track/{sent.TrackingToken}", PostgresApiFixture.Json, _ct);
+        var cancelled = await ReadAsync(await visitor.PostAsync($"/api/requests/track/{sent.TrackingToken}/cancel", null, _ct));
+
+        Assert.Equal(sent.Id, tracked!.Id);
+        Assert.Equal(RequestStatus.Cancelled, cancelled.Status);
+        Assert.Equal(RequestStatus.Cancelled, (await ReadAsync(await TrackAsync(visitor, sent.TrackingToken))).Status);
     }
 }

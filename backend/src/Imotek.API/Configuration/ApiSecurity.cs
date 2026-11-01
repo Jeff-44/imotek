@@ -61,7 +61,7 @@ public static class ApiSecurity
             services.AddCors(options => options.AddPolicy(CorsPolicy, policy => policy
                 .WithOrigins(origins)
                 .WithMethods("GET", "POST", "PUT", "DELETE")
-                .WithHeaders("Authorization", "Content-Type")));
+                .WithHeaders("Authorization", "Content-Type", "X-Tracking-Token")));
         }
 
         var authPermitLimit = configuration.GetValue("RateLimiting:AuthPermitLimit", 10);

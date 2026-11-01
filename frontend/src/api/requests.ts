@@ -111,6 +111,14 @@ const actionPaths: Record<RequestAction, string> = {
 
 const id = (value: string) => encodeURIComponent(value)
 
+const TRACKING_TOKEN_HEADER = 'X-Tracking-Token'
+
+/**
+ * A visitor's follow-up link. The token is in the fragment (after #): browsers never send it to the
+ * server, so it stays out of every access log; the page then passes it to the API in a header.
+ */
+export const trackingPath = (token: string) => `/suivi#${token}`
+
 export const requestsApi = {
   contact: (propertyId: string, signal?: AbortSignal) =>
     apiFetch<AgentContact>(`/api/properties/${id(propertyId)}/contact`, { signal }),
@@ -122,11 +130,15 @@ export const requestsApi = {
 
   received: (signal?: AbortSignal) => apiFetch<ClientRequest[]>('/api/requests/received', { signal }),
 
-  /** A visitor's request, through their private follow-up link. */
-  track: (token: string, signal?: AbortSignal) => apiFetch<ClientRequest>(`/api/requests/track/${id(token)}`, { signal }),
+  /** A visitor's request, through their private follow-up link. The token goes in a header, never in a URL. */
+  track: (token: string, signal?: AbortSignal) =>
+    apiFetch<ClientRequest>('/api/requests/track', { signal, headers: { [TRACKING_TOKEN_HEADER]: token } }),
 
   actAsGuest: (token: string, action: RequestAction) =>
-    apiFetch<ClientRequest>(`/api/requests/track/${id(token)}/${actionPaths[action]}`, { method: 'POST' }),
+    apiFetch<ClientRequest>(`/api/requests/track/${actionPaths[action]}`, {
+      method: 'POST',
+      headers: { [TRACKING_TOKEN_HEADER]: token },
+    }),
 
   act: (requestId: string, action: RequestAction, input: ActionInput = {}) =>
     apiFetch<ClientRequest>(`/api/requests/${id(requestId)}/${actionPaths[action]}`, {

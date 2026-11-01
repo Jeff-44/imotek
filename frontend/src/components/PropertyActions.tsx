@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useLocation } from 'react-router'
 import { ApiError } from '../api/client'
-import { contactLinks, localDateTimeToIso, requestsApi, type RequestType } from '../api/requests'
+import { contactLinks, localDateTimeToIso, requestsApi, trackingPath, type RequestType } from '../api/requests'
 import type { Property } from '../api/types'
 import { useAuth } from '../auth/useAuth'
 import { useApi } from '../useApi'
@@ -97,7 +97,7 @@ export function PropertyActions({ property }: { property: Property }) {
 }
 
 function SentConfirmation({ sent, signedIn }: { sent: Sent; signedIn: boolean }) {
-  const link = sent.trackingToken ? `/suivi/${sent.trackingToken}` : null
+  const link = sent.trackingToken ? trackingPath(sent.trackingToken) : null
   return (
     <div className="alert alert--success" role="status">
       <p>Votre demande a été envoyée à l’agent.</p>

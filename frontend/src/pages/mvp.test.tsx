@@ -111,7 +111,7 @@ describe('Property actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Envoyer la demande' }))
 
     const link = await screen.findByTestId('tracking-link')
-    expect(link.getAttribute('href')).toBe('/suivi/tok_123')
+    expect(link.getAttribute('href')).toBe('/suivi#tok_123')
     const body = JSON.parse(String(calls.find((c) => c.url === '/api/properties/p1/requests')!.init.body))
     expect(body).toMatchObject({ type: 'Visit', fullName: 'Marie Joseph', email: 'marie@example.com', phoneNumber: '+509 3712 3456', shareClientPhone: true })
     expect(body.visitAt).toBe(new Date('2030-01-15T10:30').toISOString())
@@ -396,8 +396,8 @@ describe('Logout from a protected page', () => {
 })
 
 describe('Follow-up link', () => {
-  it('shows the request and accepts a new visit date through the link', async () => {
-    const rescheduled = makeRequest({
+  const rescheduled = () =>
+    makeRequest({
       type: 'Visit',
       status: 'Rescheduled',
       visitAt: '2030-01-15T15:00:00Z',
@@ -406,34 +406,66 @@ describe('Follow-up link', () => {
       agent: { fullName: 'Jean Agent', email: null, phoneNumber: null },
       allowedActions: ['Cancel', 'AcceptProposal'],
     })
-    const calls = mockFetch((url) =>
-      url.endsWith('/accept-proposal') ? json(200, { ...rescheduled, status: 'Accepted', allowedActions: ['Cancel'] }) : json(200, rescheduled),
-    )
-    renderWithAuth(
-      <Routes>
-        <Route path="/suivi/:token" element={<TrackingPage />} />
-      </Routes>,
+
+  function Where() {
+    const location = useLocation()
+    return <p data-testid="where">{location.pathname + location.hash}</p>
+  }
+
+  function renderTracking(entry: string) {
+    return renderWithAuth(
+      <>
+        <Routes>
+          <Route path="/suivi" element={<TrackingPage />} />
+          <Route path="/suivi/:token" element={<TrackingPage />} />
+        </Routes>
+        <Where />
+      </>,
       authState(null),
-      '/suivi/tok_123',
+      entry,
     )
+  }
+
+  const tokenHeader = (init: RequestInit) => new Headers(init.headers).get('X-Tracking-Token')
+
+  it('reads the token from the fragment and sends it in a header, never in a URL', async () => {
+    const calls = mockFetch((url) =>
+      url.endsWith('/accept-proposal') ? json(200, { ...rescheduled(), status: 'Accepted', allowedActions: ['Cancel'] }) : json(200, rescheduled()),
+    )
+    renderTracking('/suivi#tok_123')
 
     expect(await screen.findByText('Plutôt le lendemain ?')).toBeTruthy()
     await userEvent.click(screen.getByRole('button', { name: 'Accepter la nouvelle date' }))
 
-    await waitFor(() => expect(calls.some((c) => c.url === '/api/requests/track/tok_123/accept-proposal')).toBe(true))
-    expect(calls[0].url).toBe('/api/requests/track/tok_123')
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/requests/track/accept-proposal')).toBe(true))
+    expect(calls.map((c) => c.url)).toEqual(['/api/requests/track', '/api/requests/track/accept-proposal', '/api/requests/track'])
+    expect(calls.every((c) => tokenHeader(c.init) === 'tok_123')).toBe(true)
+    expect(calls.some((c) => c.url.includes('tok_123'))).toBe(false)
   })
 
-  it('says when the link is not valid', async () => {
-    mockFetch(() => json(404, { title: 'The request was not found.' }))
-    renderWithAuth(
-      <Routes>
-        <Route path="/suivi/:token" element={<TrackingPage />} />
-      </Routes>,
-      authState(null),
-      '/suivi/wrong',
-    )
+  it('moves the token of an old /suivi/<token> link to the fragment and keeps working', async () => {
+    const calls = mockFetch((url) => (url.endsWith('/cancel') ? json(200, { ...rescheduled(), status: 'Cancelled', allowedActions: [] }) : json(200, rescheduled())))
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderTracking('/suivi/tok_old')
 
+    expect(await screen.findByText('Plutôt le lendemain ?')).toBeTruthy()
+    await waitFor(() => expect(screen.getByTestId('where').textContent).toBe('/suivi#tok_old'))
+    await userEvent.click(screen.getByRole('button', { name: 'Annuler ma demande' }))
+
+    await waitFor(() => expect(calls.some((c) => c.url === '/api/requests/track/cancel')).toBe(true))
+    expect(calls.every((c) => tokenHeader(c.init) === 'tok_old')).toBe(true)
+    expect(calls.some((c) => c.url.includes('tok_old'))).toBe(false)
+  })
+
+  it('says when the link is not valid, and calls nothing without a token', async () => {
+    const calls = mockFetch(() => json(404, { title: 'The request was not found.' }))
+    const { unmount } = renderTracking('/suivi#wrong')
     expect(await screen.findByText('Ce lien de suivi n’est pas valide.')).toBeTruthy()
+    unmount()
+
+    const before = calls.length
+    renderTracking('/suivi')
+    expect(screen.getByText('Ce lien de suivi n’est pas valide.')).toBeTruthy()
+    expect(calls.length).toBe(before)
   })
 })

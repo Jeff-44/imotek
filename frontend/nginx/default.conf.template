@@ -19,6 +19,23 @@ map "${NGINX_TRUST_X_REAL_IP}:$http_x_real_ip" $client_ip {
     default                $remote_addr;
 }
 
+# Follow-up links of visitors carry a secret. New links keep it in the URL fragment, which browsers
+# never send; links from before (/suivi/<token>, /api/requests/track/<token>) would put it in the
+# access log, as the request line or as the Referer of the page's assets. Both are redacted.
+# Only token-like segments (20+ URL-safe characters) are masked: action names such as accept-proposal stay readable.
+map $request $request_redacted {
+    "~^(?<rq_method>\S+) (?<rq_prefix>/suivi/|/api/requests/track/)[A-Za-z0-9_%-]{20,}(?<rq_rest>\S*) (?<rq_protocol>\S+)$" "$rq_method $rq_prefix[redacted]$rq_rest $rq_protocol";
+    default $request;
+}
+
+map $http_referer $referer_redacted {
+    "~^(?<rf_origin>.*?)(?<rf_prefix>/suivi/|/api/requests/track/)[A-Za-z0-9_%-]{20,}(?<rf_rest>.*)$" "$rf_origin$rf_prefix[redacted]$rf_rest";
+    default $http_referer;
+}
+
+log_format imotek '$remote_addr - $remote_user [$time_local] "$request_redacted" '
+                  '$status $body_bytes_sent "$referer_redacted" "$http_user_agent"';
+
 map $forwarded_proto $hsts {
     https   "max-age=31536000; includeSubDomains";
     default "";
@@ -29,6 +46,7 @@ server {
     listen [::]:${PORT};
     server_name _;
     server_tokens off;
+    access_log /var/log/nginx/access.log imotek;
 
     root /usr/share/nginx/html;
 

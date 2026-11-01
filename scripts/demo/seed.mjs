@@ -194,7 +194,7 @@ await act('marie', cancelled, 'cancel')
 const guestLinks = []
 for (const body of guestRequests()) {
   const sent = await call('POST', `/api/properties/${property.petionville}/requests`, { body })
-  guestLinks.push(`/suivi/${sent.trackingToken}`)
+  guestLinks.push(`/suivi#${sent.trackingToken}`)
 }
 
 // Nadia withdraws her consent: her listings show no number (her approval stays).

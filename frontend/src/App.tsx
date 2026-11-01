@@ -25,6 +25,8 @@ function App() {
             <Route index element={<HomePage />} />
             <Route path="biens" element={<PropertiesPage />} />
             <Route path="biens/:id" element={<PropertyDetailPage />} />
+            <Route path="suivi" element={<TrackingPage />} />
+            {/* Links sent before the token moved to the fragment: the page moves it there at once. */}
             <Route path="suivi/:token" element={<TrackingPage />} />
             <Route path="connexion" element={<LoginPage />} />
             <Route path="inscription" element={<RegisterPage />} />
