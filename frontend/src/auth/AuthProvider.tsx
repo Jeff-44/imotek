@@ -68,6 +68,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearSession])
 
   const login = useCallback(async (email: string, password: string) => {
+    // Signing in replaces any previous session: a stale token must not be sent with the credentials.
+    setTokens(null)
     setTokens(await authApi.login(email, password))
     try {
       const me = await authApi.me()
@@ -81,6 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(
     async (input: RegisterInput) => {
+      setTokens(null) // a new account never inherits a previous, possibly stale, session
       await authApi.register(input)
       return login(input.email, input.password)
     },

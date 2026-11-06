@@ -8,6 +8,7 @@ using Imotek.Infrastructure.Images;
 using Imotek.Infrastructure.Persistence;
 using Imotek.Infrastructure.Persistence.Repositories;
 using Imotek.Infrastructure.Storage;
+using Microsoft.AspNetCore.Authentication.BearerToken;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -50,6 +51,12 @@ public static class DependencyInjection
             .AddRoles<IdentityRole<Guid>>()
             .AddEntityFrameworkStores<ImotekDbContext>()
             .AddSignInManager();
+
+        // Access tokens whose security stamp is outdated (logout, approval) are refused, with a short cache.
+        services.Configure<SecurityStampCacheOptions>(configuration.GetSection(SecurityStampCacheOptions.SectionName));
+        services.AddSingleton<SecurityStampCache>();
+        services.AddScoped<AccessTokenStampValidator>();
+        services.PostConfigure<BearerTokenOptions>(IdentityConstants.BearerScheme, AccessTokenStampValidator.Attach);
 
         services.AddScoped<IAuthService, IdentityAuthService>();
         services.AddScoped<IdentityAgentAdministration>();

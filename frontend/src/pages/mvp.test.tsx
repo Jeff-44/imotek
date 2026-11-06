@@ -74,6 +74,19 @@ const buttonNames = () => screen.queryAllByRole('button').map((b) => b.textConte
 const contact = (phoneNumber: string | null) => json(200, { agentName: 'Jean Agent', phoneNumber })
 
 describe('Property actions', () => {
+  it('shows no action while the session is being restored, then the right ones', async () => {
+    mockFetch(() => contact(null))
+    const restoring = renderWithAuth(<PropertyActions property={makeProperty()} />, authState(null, { loading: true }))
+    expect(restoring.container.textContent).toBe('')
+    expect(buttonNames()).toEqual([])
+    restoring.unmount()
+
+    renderWithAuth(<PropertyActions property={makeProperty()} />, authState(makeUser(), { loading: false }))
+    await screen.findByText('Jean Agent')
+    expect(buttonNames()).toEqual(['Demander une location', 'Demander une visite'])
+    expect(screen.queryByLabelText('Nom complet')).toBeNull()
+  })
+
   it('lets visitors without an account see the number and ask for a rental or a visit', async () => {
     mockFetch(() => contact('+50937123456'))
     renderWithAuth(<PropertyActions property={makeProperty()} />, authState(null))

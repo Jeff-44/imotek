@@ -133,6 +133,68 @@ describe('apiFetch token handling', () => {
     expect(getToken()).toBe('a1')
   })
 
+  it('replays an action once, with the same body, after renewing an expired token', async () => {
+    setTokens({ accessToken: 'expired', refreshToken: 'r1' })
+    responses.push(json(401), json(200, { accessToken: 'a2', refreshToken: 'r2' }), json(201, { id: 'req-1' }))
+    const body = JSON.stringify({ type: 'Visit', message: 'Samedi ?' })
+
+    const created = await apiFetch<{ id: string }>('/api/properties/p1/requests', { method: 'POST', body })
+
+    expect(created.id).toBe('req-1')
+    expect(calls.map((c) => c.url)).toEqual(['/api/properties/p1/requests', '/api/auth/refresh', '/api/properties/p1/requests'])
+    expect(calls[2].init.body).toBe(body)
+    expect(calls[2].init.method).toBe('POST')
+    expect(authHeader(calls[2])).toBe('Bearer a2')
+  })
+
+  it('never replays an action without its author once the session is over', async () => {
+    setTokens({ accessToken: 'revoked', refreshToken: 'revoked' })
+    const expired = vi.fn()
+    setSessionExpiredHandler(expired)
+    responses.push(json(401), json(401))
+
+    const error = (await apiFetch('/api/properties/p1/requests', { method: 'POST', body: '{}' }).catch((e: unknown) => e)) as ApiError
+
+    expect(error.status).toBe(401)
+    expect(error.message).toBe('Votre session a expiré. Reconnectez-vous pour continuer.')
+    // Two calls only: the action and the refresh. The action is not sent again, signed in or not.
+    expect(calls.map((c) => c.url)).toEqual(['/api/properties/p1/requests', '/api/auth/refresh'])
+    expect(expired).toHaveBeenCalledOnce()
+    expect(getToken()).toBeNull()
+  })
+
+  it('lets a public read go on as a visitor once the session is over', async () => {
+    setTokens({ accessToken: 'revoked', refreshToken: 'revoked' })
+    responses.push(json(401), json(401), json(200, { items: [] }))
+
+    const page = await apiFetch<{ items: unknown[] }>('/api/properties')
+
+    expect(page.items).toEqual([])
+    expect(calls.map((c) => c.url)).toEqual(['/api/properties', '/api/auth/refresh', '/api/properties'])
+    expect(authHeader(calls[2])).toBeNull()
+  })
+
+  it('renews at most once per request: a second 401 is final', async () => {
+    setTokens({ accessToken: 'expired', refreshToken: 'r1' })
+    responses.push(json(401), json(200, { accessToken: 'a2', refreshToken: 'r2' }), json(401))
+
+    await expect(apiFetch('/api/requests/mine')).rejects.toMatchObject({ status: 401 })
+
+    expect(calls.map((c) => c.url)).toEqual(['/api/requests/mine', '/api/auth/refresh', '/api/requests/mine'])
+  })
+
+  it('replays an upload with the same form data', async () => {
+    setTokens({ accessToken: 'expired', refreshToken: 'r1' })
+    responses.push(json(401), json(200, { accessToken: 'a2', refreshToken: 'r2' }), json(201, {}))
+    const form = new FormData()
+    form.append('file', new Blob(['x']), 'photo.jpg')
+
+    await apiFetch('/api/properties/p1/images', { method: 'POST', body: form })
+
+    expect(calls[2].init.body).toBe(form)
+    expect(new Headers(calls[2].init.headers).has('Content-Type')).toBe(false)
+  })
+
   it('does not try to refresh when the user was not signed in', async () => {
     responses.push(json(401, { title: 'Invalid email or password.' }))
 

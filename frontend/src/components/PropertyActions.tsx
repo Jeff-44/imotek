@@ -22,11 +22,14 @@ type Sent = { type: RequestType; trackingToken: string | null }
  * The API applies the same rules.
  */
 export function PropertyActions({ property }: { property: Property }) {
-  const { user, hasRole } = useAuth()
+  const { user, hasRole, loading } = useAuth()
   const location = useLocation()
   const [open, setOpen] = useState<RequestType | null>(null)
   const [sent, setSent] = useState<Sent | null>(null)
 
+  // While the session is being restored, who the user is is not known yet: show no action at all
+  // rather than a visitor's buttons to a client (or a client's to a visitor).
+  if (loading) return null
   if (property.status !== 'Available') return null
   if (user?.id === property.ownerId) return null
 

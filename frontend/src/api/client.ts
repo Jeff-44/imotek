@@ -147,12 +147,20 @@ async function send(path: string, init: RequestInit): Promise<Response> {
   }
 }
 
+const SESSION_ENDED_MESSAGE = 'Votre session a expiré. Reconnectez-vous pour continuer.'
+
+/** Reads can be replayed without a session; anything else must keep its author. */
+const isRead = (init: RequestInit) => ['GET', 'HEAD'].includes((init.method ?? 'GET').toUpperCase())
+
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
   const hadToken = getToken() !== null
   let response = await send(path, init)
 
-  // Expired access token: renew it once and replay the request. Only a refused refresh token
-  // ends the session; a rate limit, a server error or a network failure keeps it for a retry.
+  // The API answers 401 whenever the token sent is not valid (expired or revoked), on public
+  // endpoints too. Renew it once and replay the request once, with the same body; the API refused
+  // the first attempt before doing anything, so nothing is submitted twice. A second 401 is final.
+  // Only a refused refresh token ends the session; a rate limit, a server error or a network
+  // failure keeps it for a retry.
   if (response.status === 401 && hadToken) {
     const outcome = await renew()
     if (outcome === 'renewed') {
@@ -160,6 +168,10 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
     } else if (outcome === 'rejected') {
       setTokens(null)
       onSessionExpired?.()
+      // A read (a public page) goes on as a visitor. An action is never replayed without its
+      // signed-in author: a client's request must not turn into a visitor's.
+      if (!isRead(init)) throw new ApiError(401, SESSION_ENDED_MESSAGE)
+      response = await send(path, init)
     } else {
       throw outcome
     }

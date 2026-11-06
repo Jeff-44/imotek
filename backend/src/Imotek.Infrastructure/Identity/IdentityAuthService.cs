@@ -12,7 +12,8 @@ internal sealed class IdentityAuthService(
     SignInManager<ApplicationUser> signInManager,
     IOptionsMonitor<BearerTokenOptions> bearerTokenOptions,
     TimeProvider timeProvider,
-    IPhoneNumberNormalizer phoneNumbers) : IAuthService
+    IPhoneNumberNormalizer phoneNumbers,
+    SecurityStampCache stampCache) : IAuthService
 {
     private const string InvalidCredentials = "Invalid email or password.";
     private const string InvalidRefreshToken = "The session has expired. Please sign in again.";
@@ -52,8 +53,10 @@ internal sealed class IdentityAuthService(
             return Error.Unauthorized();
         }
 
-        // A new security stamp makes every refresh token issued so far invalid.
+        // A new security stamp makes every token issued so far invalid: refresh tokens at once, access
+        // tokens on their next request (the cached stamp of this user is dropped here).
         await userManager.UpdateSecurityStampAsync(user);
+        stampCache.Invalidate(user.Id);
         return Result.Success();
     }
 

@@ -99,6 +99,16 @@ public sealed class PostgresApiFixture : IAsyncLifetime
 
     public HttpClient Anonymous() => _factory!.CreateClient();
 
+    /// <summary>Same database and settings, with extra configuration (its own host, its own singletons).</summary>
+    public WebApplicationFactory<Program> Derive(Action<IWebHostBuilder> configure) => _factory!.WithWebHostBuilder(configure);
+
+    /// <summary>Like <see cref="Service{T}"/> for asynchronous work: the scope lives until it is done.</summary>
+    public async Task<T> ServiceAsync<T>(Func<IServiceProvider, Task<T>> use)
+    {
+        await using var scope = _factory!.Services.CreateAsyncScope();
+        return await use(scope.ServiceProvider);
+    }
+
     public T Service<T>(Func<IServiceProvider, T> use)
     {
         using var scope = _factory!.Services.CreateScope();

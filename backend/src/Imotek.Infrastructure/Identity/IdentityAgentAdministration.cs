@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Imotek.Infrastructure.Identity;
 
 /// <summary>Admin decisions on agent requests. The controller restricts it to admins; it also refuses self-decisions.</summary>
-internal sealed class IdentityAgentAdministration(UserManager<ApplicationUser> userManager, TimeProvider timeProvider)
+internal sealed class IdentityAgentAdministration(UserManager<ApplicationUser> userManager, TimeProvider timeProvider, SecurityStampCache stampCache)
     : IAgentAdministration, IAgentAccess
 {
     public async Task<IReadOnlyList<AgentAccountResponse>> ListAsync(AgentStatus? status, CancellationToken cancellationToken)
@@ -83,6 +83,7 @@ internal sealed class IdentityAgentAdministration(UserManager<ApplicationUser> u
 
             // Roles changed: existing refresh tokens are revoked, the next sign-in carries the new role.
             await userManager.UpdateSecurityStampAsync(user);
+            stampCache.Invalidate(user.Id);
         }
 
         return ToResponse(user, roles);

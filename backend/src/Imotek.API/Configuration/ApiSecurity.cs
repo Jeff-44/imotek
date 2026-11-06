@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Claims;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
@@ -164,6 +165,22 @@ public static class ApiSecurity
         }
 
         app.UseAuthentication();
+
+        // A request that carries an access token which is not valid (expired, revoked, unreadable) gets a
+        // 401 on every endpoint, public ones included, before anything runs: it is never served silently as
+        // an anonymous visitor (a signed-in client's request would otherwise become a visitor's). The client
+        // renews its token and replays the request; true visitors send no token and are not affected.
+        app.Use(async (context, next) =>
+        {
+            if (context.Request.Headers.Authorization.Count > 0 && context.User.Identity?.IsAuthenticated != true)
+            {
+                await context.ChallengeAsync(IdentityConstants.BearerScheme);
+                return;
+            }
+
+            await next(context);
+        });
+
         app.UseAuthorization();
         app.UseRateLimiter();
 

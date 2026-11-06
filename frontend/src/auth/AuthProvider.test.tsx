@@ -21,6 +21,12 @@ function memoryStorage(): Storage {
   }
 }
 
+function Probe({ onAuth }: { onAuth: (value: AuthState | null) => void }) {
+  const value = useContext(AuthContext)
+  useEffect(() => onAuth(value), [value, onAuth])
+  return null
+}
+
 describe('logout', () => {
   beforeEach(() => vi.stubGlobal('localStorage', memoryStorage()))
 
@@ -57,11 +63,6 @@ describe('logout', () => {
 describe('session restore', () => {
   beforeEach(() => vi.stubGlobal('localStorage', memoryStorage()))
 
-  function Probe({ onAuth }: { onAuth: (value: AuthState | null) => void }) {
-    const value = useContext(AuthContext)
-    useEffect(() => onAuth(value), [value, onAuth])
-    return null
-  }
 
   it('retries after a temporary failure instead of signing the user out', async () => {
     setTokens({ accessToken: 'a1', refreshToken: 'r1' })
@@ -100,5 +101,33 @@ describe('session restore', () => {
     await waitFor(() => expect(auth?.loading).toBe(false))
     expect(auth!.user).toBeNull()
     expect(getToken()).toBeNull()
+  })
+})
+
+describe('sign-in', () => {
+  beforeEach(() => vi.stubGlobal('localStorage', memoryStorage()))
+
+  it('forgets a stale session before sending the credentials', async () => {
+    setTokens({ accessToken: 'stale', refreshToken: 'stale' })
+    const calls = mockFetch((url) =>
+      url === '/api/auth/login' ? json(200, { accessToken: 'a1', refreshToken: 'r1' }) : url === '/api/auth/me' ? json(200, makeUser()) : json(401),
+    )
+    let auth: AuthState | null = null
+    render(
+      <AuthProvider>
+        <Probe
+          onAuth={(value) => {
+            auth = value
+          }}
+        />
+      </AuthProvider>,
+    )
+    await waitFor(() => expect(auth?.loading).toBe(false))
+
+    await act(() => auth!.login('user@imotek.test', 'Passw0rd-123'))
+
+    const login = calls.find((c) => c.url === '/api/auth/login')!
+    expect(new Headers(login.init.headers).get('Authorization')).toBeNull()
+    expect(getToken()).toBe('a1')
   })
 })
